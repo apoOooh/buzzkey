@@ -4,6 +4,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+- Swarmterm protocol negotiation (`hello`): with Swarmterm 1.10+ a dictation
+  runs over one held connection, the target pane shows a "Listening…" pill,
+  and Stop in the pane discards the recording. Older Swarmterm builds are
+  detected and used as before.
+
 ## [1.9.1] - 2026-10-12
 
 ### Fixed

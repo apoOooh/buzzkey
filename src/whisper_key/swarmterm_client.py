@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import queue
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -8,6 +10,13 @@ from pathlib import Path
 from typing import Callable, Optional
 
 PROTOCOL_VERSION = 1
+# Negotiated inside `hello`; the envelope above stays 1 so old Swarmterm
+# builds keep working. Swarmterm 1.9.0 answers hello with bad-request.
+PROTO = 2
+CAPABILITIES = ["indicator"]
+# A held dictation may stay silent this long; Swarmterm pushes `expired`
+# at 120 s and closes the connection first.
+HOLD_TIMEOUT_SECONDS = 130.0
 MAX_RESPONSE_BYTES = 64 * 1024
 DISCOVERY_FILE = "voice-endpoint.json"
 
@@ -25,6 +34,8 @@ class SwarmtermTarget:
     pin: Optional[str]
     name: Optional[str] = None
     error: Optional[str] = None
+    # Set when the pin lives on a held connection ("indicator").
+    session: Optional["DictationSession"] = None
 
 
 class SwarmtermError(Exception):
@@ -40,7 +51,7 @@ class PipeTransport:
         self._win32event = win32event
         self._win32file = win32file
         self._pywintypes = pywintypes
-        self._deadline = time.monotonic() + timeout_seconds
+        self._timeout = timeout_seconds
         try:
             self._handle = win32file.CreateFile(
                 pipe_name,
@@ -54,11 +65,9 @@ class PipeTransport:
         except pywintypes.error as e:
             raise SwarmtermError(f"connect failed: {e.strerror}") from e
 
-    def _remaining_ms(self) -> int:
-        return max(0, int((self._deadline - time.monotonic()) * 1000))
-
-    def _wait(self, overlapped) -> int:
-        result = self._win32event.WaitForSingleObject(overlapped.hEvent, self._remaining_ms())
+    def _wait(self, overlapped, deadline: float) -> int:
+        remaining = max(0, int((deadline - time.monotonic()) * 1000))
+        result = self._win32event.WaitForSingleObject(overlapped.hEvent, remaining)
         if result != self._win32event.WAIT_OBJECT_0:
             self._win32file.CancelIo(self._handle)
             raise SwarmtermError("timeout")
@@ -72,15 +81,22 @@ class PipeTransport:
         overlapped.hEvent = self._win32event.CreateEvent(None, True, False, None)
         return overlapped
 
-    def send_line(self, line: str):
+    def _deadline(self, timeout_seconds: Optional[float]) -> float:
+        # Per operation: a held dictation connection lives far longer than
+        # any single request may take.
+        return time.monotonic() + (self._timeout if timeout_seconds is None else timeout_seconds)
+
+    def send_line(self, line: str, timeout_seconds: Optional[float] = None):
+        deadline = self._deadline(timeout_seconds)
         overlapped = self._overlapped()
         try:
             self._win32file.WriteFile(self._handle, (line + "\n").encode("utf-8"), overlapped)
         except self._pywintypes.error as e:
             raise SwarmtermError(f"write failed: {e.strerror}") from e
-        self._wait(overlapped)
+        self._wait(overlapped, deadline)
 
-    def read_line(self) -> str:
+    def read_line(self, timeout_seconds: Optional[float] = None) -> str:
+        deadline = self._deadline(timeout_seconds)
         data = b""
         while b"\n" not in data:
             if len(data) > MAX_RESPONSE_BYTES:
@@ -91,7 +107,7 @@ class PipeTransport:
                 self._win32file.ReadFile(self._handle, buffer, overlapped)
             except self._pywintypes.error as e:
                 raise SwarmtermError(f"read failed: {e.strerror}") from e
-            count = self._wait(overlapped)
+            count = self._wait(overlapped, deadline)
             if count == 0:
                 raise SwarmtermError("connection closed")
             data += bytes(buffer[:count])
@@ -102,6 +118,81 @@ class PipeTransport:
             self._handle.Close()
         except Exception:
             pass
+
+
+class DictationSession:
+    """One held connection for one dictation (capability "indicator").
+
+    A single reader thread owns all reads on the handle: lines with an
+    `event` key are pushes, every other line answers the one request in
+    flight. Requests are serialised by a lock, so that rule holds.
+    """
+
+    def __init__(self, transport, token: str, on_cancelled: Callable[[str, str], None], logger):
+        self._transport = transport
+        self._token = token
+        self._on_cancelled = on_cancelled
+        self._logger = logger
+        self._answers: queue.Queue = queue.Queue()
+        self._lock = threading.Lock()
+        self.cancelled_reason: Optional[str] = None
+        self._closed = False
+        threading.Thread(target=self._read_loop, daemon=True).start()
+
+    def _read_loop(self):
+        while True:
+            try:
+                line = self._transport.read_line(HOLD_TIMEOUT_SECONDS)
+            except SwarmtermError as e:
+                self._answers.put(e)
+                return
+            try:
+                message = json.loads(line)
+            except ValueError:
+                self._answers.put(SwarmtermError("invalid response"))
+                continue
+            if isinstance(message, dict) and "event" in message:
+                if message.get("event") == "cancelled":
+                    reason = str(message.get("reason", ""))
+                    self.cancelled_reason = reason
+                    pin = str(message.get("pin", ""))
+                    self._logger.info(f"Swarmterm cancelled the dictation: {reason}")
+                    # Own thread: the handler may call back into this
+                    # session, whose answers only this reader delivers.
+                    threading.Thread(target=self._on_cancelled, args=(pin, reason), daemon=True).start()
+                continue
+            self._answers.put(message)
+
+    def request(self, payload: dict, timeout_seconds: float) -> dict:
+        with self._lock:
+            if self._closed:
+                raise SwarmtermError("connection closed")
+            # Anything queued now arrived while no request was open: never
+            # let it pass as the answer to this one. A queued error means
+            # the reader has ended.
+            while True:
+                try:
+                    stale = self._answers.get_nowait()
+                except queue.Empty:
+                    break
+                if isinstance(stale, Exception):
+                    self._closed = True
+                    raise stale
+            self._transport.send_line(
+                json.dumps({"v": PROTOCOL_VERSION, "token": self._token, **payload}), timeout_seconds)
+            try:
+                answer = self._answers.get(timeout=timeout_seconds)
+            except queue.Empty as e:
+                raise SwarmtermError("timeout") from e
+        if isinstance(answer, Exception):
+            raise answer
+        if not isinstance(answer, dict):
+            raise SwarmtermError("invalid response")
+        return answer
+
+    def close(self):
+        self._closed = True
+        self._transport.close()
 
 
 def default_discovery_dirs(app_ids: list[str]) -> list[Path]:
@@ -127,6 +218,12 @@ class SwarmtermClient:
         self.foreground_pid = foreground_pid or (lambda: None)
         self.transport_factory = transport_factory
         self.discovery_dirs = discovery_dirs if discovery_dirs is not None else default_discovery_dirs(app_ids)
+        # Called (from a worker thread) when the user pressed Stop in the
+        # Swarmterm pane: the recording is to be discarded.
+        self.on_user_cancel: Optional[Callable[[], None]] = None
+        # Pipes that answered hello like Swarmterm 1.9.0 (proto 1); their
+        # name changes with every Swarmterm launch.
+        self._legacy_pipes: set[str] = set()
 
     def _read_endpoints(self) -> list[SwarmtermEndpoint]:
         endpoints = []
@@ -169,10 +266,54 @@ class SwarmtermClient:
             raise SwarmtermError("invalid response")
         return response
 
+    def _handle_cancelled(self, pin: str, reason: str):
+        if reason == "user" and self.on_user_cancel is not None:
+            try:
+                self.on_user_cancel()
+            except Exception as e:
+                self.logger.error(f"Swarmterm stop handler failed: {e}")
+
+    def _begin_held(self, endpoint: SwarmtermEndpoint) -> Optional[SwarmtermTarget]:
+        """hello + begin on one connection. None = endpoint speaks proto 1."""
+        transport = self.transport_factory(endpoint.pipe, self.begin_timeout_seconds)
+        try:
+            transport.send_line(json.dumps({
+                "v": PROTOCOL_VERSION, "token": endpoint.token, "op": "hello", "requestId": uuid.uuid4().hex,
+                "proto": PROTO, "app": "buzzkey", "version": _app_version(), "capabilities": CAPABILITIES,
+            }), self.begin_timeout_seconds)
+            hello = json.loads(transport.read_line(self.begin_timeout_seconds))
+        except (SwarmtermError, ValueError):
+            transport.close()
+            raise
+        if not isinstance(hello, dict) or not hello.get("ok") or "indicator" not in (hello.get("capabilities") or []):
+            transport.close()
+            if not (isinstance(hello, dict) and hello.get("ok")):
+                self.logger.info(f"Swarmterm speaks proto 1 ({hello.get('reason') if isinstance(hello, dict) else hello})")
+            self._legacy_pipes.add(endpoint.pipe)
+            return None
+        session = DictationSession(transport, endpoint.token, self._handle_cancelled, self.logger)
+        try:
+            response = session.request({"op": "begin", "requestId": uuid.uuid4().hex}, self.begin_timeout_seconds)
+        except SwarmtermError:
+            session.close()
+            raise
+        if response.get("ok") and isinstance(response.get("pin"), str):
+            return SwarmtermTarget(endpoint=endpoint, pin=response["pin"], name=response.get("name"), session=session)
+        session.close()
+        return SwarmtermTarget(endpoint=endpoint, pin=None, error=str(response.get("reason", "rejected")))
+
     def begin(self) -> Optional[SwarmtermTarget]:
         endpoint = self.find_foreground_endpoint()
         if endpoint is None:
             return None
+        if endpoint.pipe not in self._legacy_pipes:
+            try:
+                target = self._begin_held(endpoint)
+            except (SwarmtermError, ValueError) as e:
+                self.logger.warning(f"Swarmterm begin failed: {e}")
+                return SwarmtermTarget(endpoint=endpoint, pin=None, error=str(e))
+            if target is not None:
+                return target
         try:
             response = self._request(endpoint, {"op": "begin", "requestId": uuid.uuid4().hex}, self.begin_timeout_seconds)
         except SwarmtermError as e:
@@ -186,13 +327,23 @@ class SwarmtermClient:
         if target.pin is None:
             return False, target.error or "no-target"
         payload = {"op": "insert", "requestId": uuid.uuid4().hex, "pin": target.pin, "text": text, "submit": submit}
+        session = target.session
         try:
-            response = self._request(target.endpoint, payload, self.insert_timeout_seconds)
+            if session is not None:
+                if session.cancelled_reason is not None:
+                    # The pin is gone already; "user" means discard.
+                    return False, "cancelled-by-user" if session.cancelled_reason == "user" else session.cancelled_reason
+                response = session.request(payload, self.insert_timeout_seconds)
+            else:
+                response = self._request(target.endpoint, payload, self.insert_timeout_seconds)
         except SwarmtermError as e:
             self.logger.warning(f"Swarmterm insert failed: {e}")
             return False, "unknown-outcome" if str(e) == "timeout" else str(e)
         finally:
             target.pin = None
+            if session is not None:
+                session.close()
+                target.session = None
         if response.get("ok"):
             return True, None
         return False, str(response.get("reason", "rejected"))
@@ -201,7 +352,23 @@ class SwarmtermClient:
         if target is None or target.pin is None:
             return
         pin, target.pin = target.pin, None
+        session, target.session = target.session, None
         try:
-            self._request(target.endpoint, {"op": "cancel", "pin": pin}, self.begin_timeout_seconds)
+            if session is not None:
+                if session.cancelled_reason is None:
+                    session.request({"op": "cancel", "requestId": uuid.uuid4().hex, "pin": pin}, self.begin_timeout_seconds)
+            else:
+                self._request(target.endpoint, {"op": "cancel", "pin": pin}, self.begin_timeout_seconds)
         except SwarmtermError as e:
             self.logger.debug(f"Swarmterm cancel failed: {e}")
+        finally:
+            if session is not None:
+                session.close()
+
+
+def _app_version() -> str:
+    try:
+        from .utils import get_version
+        return str(get_version())[:64]
+    except Exception:
+        return "unknown"

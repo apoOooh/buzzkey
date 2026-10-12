@@ -367,6 +367,12 @@ class StateManager:
         self.audio_feedback.play_cancel_sound()
         self._update_ui_state("idle")
 
+    def handle_remote_cancel(self):
+        """Stop pressed in the Swarmterm pane: discard like the cancel hotkey."""
+        if self.get_current_state() == "recording":
+            print("🎤 Recording stopped in Swarmterm - discarded")
+            self.cancel_active_recording()
+
     def cancel_recording_hotkey_pressed(self) -> bool:
         current_state = self.get_current_state()
 
