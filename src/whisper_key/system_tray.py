@@ -15,6 +15,7 @@ from .orb_skins.preview import render_skin_preview, skin_palette_color
 from .widget_sizes import (MAX_SIZE as MAX_WIDGET_SIZE, MIN_SIZE as MIN_WIDGET_SIZE, NAMED_SIZES as NAMED_WIDGET_SIZES,
                            SNAP_DISTANCE as WIDGET_SIZE_SNAP_DISTANCE, size_label)
 from .tray_menu_model import Action, Choice, Footer, Header, Info, Option, Section, Slider, Submenu, Toggle, to_pystray
+from .branding import APP_NAME
 
 try:
     import pystray
@@ -114,7 +115,7 @@ class SystemTray:
     def build_menu(self) -> list:
         voice_commands_enabled = self.config_manager.get_setting('voice_commands', 'enabled')
         return [
-            Header("Whisper Key", self._status_text, lambda: self.state_manager.is_muted, self._toggle_mute,
+            Header(APP_NAME, self._status_text, lambda: self.state_manager.is_muted, self._toggle_mute,
                    version=self._app_version()),
             Section("Recording"),
             Info("Shortcut", self._recording_shortcut_text),
@@ -661,14 +662,14 @@ class SystemTray:
     def set_status_text(self, text: Optional[str]):
         if not self.icon:
             return
-        tooltip = self.tray_config.get('tooltip', 'Whisper Key')
+        tooltip = self.tray_config.get('tooltip', APP_NAME)
         self.icon.title = f"{tooltip} - {text}"[:127] if text else tooltip
 
     def notify(self, message: str):
         if not self.icon or not self.is_running:
             return
         try:
-            self.icon.notify(message, "Whisper Key")
+            self.icon.notify(message, APP_NAME)
         except Exception as e:
             self.logger.error(f"Failed to show tray notification: {e}")
 
@@ -693,8 +694,8 @@ class SystemTray:
 
     def _get_title(self) -> str:
         if self.state_manager.auto_trigger_enabled:
-            return "Whisper Key - listening for speech"
-        return "Whisper Key"
+            return f"{APP_NAME} - listening for speech"
+        return APP_NAME
 
     def start(self):
         if not self.available:
