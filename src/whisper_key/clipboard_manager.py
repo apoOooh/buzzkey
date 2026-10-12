@@ -210,7 +210,9 @@ class ClipboardManager:
     def _deliver_to_swarmterm(self, target, text: str, use_auto_enter: bool) -> bool:
         ok, reason = self.swarmterm_client.insert(target, text, use_auto_enter)
         if not ok:
+            self.logger.info(f"Swarmterm refused dictation ({len(text)} chars): {reason or 'rejected'}")
             return self._report_swarmterm_failure(text, reason or "rejected")
+        self.logger.info(f"Inserted dictation into Swarmterm ({len(text)} chars)")
         if self.copy_to_clipboard:
             pyperclip.copy(text)
         print("   ✓ Inserted into Swarmterm as a draft")
