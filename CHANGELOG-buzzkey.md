@@ -4,6 +4,16 @@ buzzkey is a fork of [whisper-key-local](https://github.com/SesioN/whisper-key-l
 `<upstream version>+bk.<n>`; upstream changes are listed in `CHANGELOG.md`. Release tags are
 `buzzkey-<upstream version>-bk.<n>`.
 
+## [1.9.1+bk.3]
+
+Based on whisper-key-local 1.9.1.
+
+- **Listening indicator in Swarmterm:** with Swarmterm GN 1.10.0 or newer, the target pane shows a
+  "Listening…" pill with a Stop button while you dictate. buzzkey negotiates the protocol on
+  connect and holds one connection per dictation; with older Swarmterm versions it falls back to
+  the previous behaviour. Stop in Swarmterm discards the dictation; any other cancellation keeps
+  the text on the clipboard.
+
 ## [1.9.1+bk.2]
 
 Based on whisper-key-local 1.9.1.
