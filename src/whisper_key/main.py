@@ -598,6 +598,8 @@ def main():
         state_manager.attach_vad_sensitivity_window(setup_vad_sensitivity_window(vad_config, state_manager))
         system_tray = setup_system_tray(tray_config, config_manager, state_manager, model_registry)
         clipboard_manager.on_delivery_blocked = system_tray.notify
+        if clipboard_manager.swarmterm_client is not None:
+            clipboard_manager.swarmterm_client.on_user_cancel = state_manager.handle_remote_cancel
         floating_widget = setup_floating_widget(config_manager, state_manager)
         if floating_widget:
             audio_recorder.on_audio_level = floating_widget.set_level

@@ -96,3 +96,13 @@ def test_unused_pin_is_cancelled_on_release(manager):
     assert client.cancelled == ["p9"]
     assert manager.deliver_transcription("hello") is True
     assert manager.pasted == ["hello"]
+
+
+def test_stop_in_swarmterm_discards_without_clipboard(manager):
+    client = FakeClient(target(), insert_result=(False, "cancelled-by-user"))
+    manager.swarmterm_client = client
+    blocked = []
+    manager.on_delivery_blocked = blocked.append
+    manager.begin_swarmterm_target()
+    assert manager.deliver_transcription("hello") is False
+    assert manager.pasted == [] and manager.copied == [] and blocked == []
