@@ -23,6 +23,8 @@ from .whisper_engine import create_whisper_engine
 from .runtime_options import ONNX_ASR, apply_onnx_runtime_selection, apply_runtime_selection
 from .voice_activity_detection import VadManager
 from .clipboard_manager import ClipboardManager
+from .swarmterm_client import SwarmtermClient
+from .platform import keyboard as platform_keyboard
 from .state_manager import StateManager
 from .terminal_title import TerminalTitle
 from .text_postprocessor import TextPostProcessor
@@ -175,6 +177,15 @@ def setup_clipboard_manager(clipboard_config):
         type_auto_enter_delay=clipboard_config['type_auto_enter_delay'],
         type_auto_enter_delay_per_100_chars=clipboard_config['type_auto_enter_delay_per_100_chars'],
         macos_key_simulation_delay=clipboard_config['macos_key_simulation_delay']
+    )
+
+def setup_swarmterm_client(swarmterm_config):
+    if not swarmterm_config.get('enabled', False):
+        return None
+    return SwarmtermClient(
+        enabled=True,
+        app_ids=list(swarmterm_config.get('app_ids') or []),
+        foreground_pid=platform_keyboard.get_foreground_process_id
     )
 
 def setup_audio_feedback(audio_feedback_config):
@@ -546,6 +557,7 @@ def main():
         streaming_manager.initialize()
         loading_screen.set_status("Finishing startup...")
         clipboard_manager = setup_clipboard_manager(clipboard_config)
+        clipboard_manager.swarmterm_client = setup_swarmterm_client(config_manager.get_swarmterm_config())
         audio_feedback = setup_audio_feedback(audio_feedback_config)
         output_audio_config = config_manager.config['output_audio']
         output_audio_control = OutputAudioControl(

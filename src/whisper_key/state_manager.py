@@ -296,6 +296,7 @@ class StateManager:
         return True
     
     def cancel_active_recording(self):
+        self.clipboard_manager.release_swarmterm_target()
         self._clear_streaming_display()
         self._command_mode = False
         self.audio_recorder.cancel_recording()
@@ -387,6 +388,8 @@ class StateManager:
             self.audio_recorder.cancel_recording()
             print("🔇 Microphone is muted - unmute to record")
         else:
+            if not auto_triggered or self._auto_trigger_paste:
+                self.clipboard_manager.begin_swarmterm_target()
             print("\n🎤 Recording started! Speak now...")
             if not auto_triggered:
                 self.config_manager.print_stop_instructions_based_on_config()
@@ -466,6 +469,7 @@ class StateManager:
             self._show_outcome("error")
         
         finally:
+            self.clipboard_manager.release_swarmterm_target()
             with self._state_lock:
                 self.is_processing = False
                 self._auto_triggered_recording = False

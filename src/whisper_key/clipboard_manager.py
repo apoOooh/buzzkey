@@ -1,5 +1,7 @@
 import logging
+import threading
 import time
+from concurrent.futures import Future
 from typing import Optional
 
 import pyperclip
@@ -26,6 +28,9 @@ class ClipboardManager:
         self.type_auto_enter_delay = type_auto_enter_delay
         self.type_auto_enter_delay_per_100_chars = type_auto_enter_delay_per_100_chars
         self.on_delivery_blocked = None
+        self.swarmterm_client = None
+        self._swarmterm_target: Optional[Future] = None
+        self._swarmterm_lock = threading.Lock()
         keyboard.set_delay(macos_key_simulation_delay)
         if self.delivery_method == "paste":
             self._test_clipboard_access()
@@ -158,6 +163,59 @@ class ClipboardManager:
         else:
             return self._clipboard_paste(text)
 
+    def begin_swarmterm_target(self):
+        self.release_swarmterm_target()
+        if self.swarmterm_client is None or not self.auto_paste:
+            return
+        future: Future = Future()
+        with self._swarmterm_lock:
+            self._swarmterm_target = future
+
+        def resolve():
+            try:
+                future.set_result(self.swarmterm_client.begin())
+            except Exception as e:
+                self.logger.error(f"Swarmterm begin failed: {e}")
+                future.set_result(None)
+
+        threading.Thread(target=resolve, daemon=True).start()
+
+    def _take_swarmterm_target(self):
+        with self._swarmterm_lock:
+            future, self._swarmterm_target = self._swarmterm_target, None
+        if future is None:
+            return None
+        try:
+            return future.result(timeout=3)
+        except Exception:
+            return None
+
+    def release_swarmterm_target(self):
+        target = self._take_swarmterm_target()
+        if target is not None and self.swarmterm_client is not None:
+            self.swarmterm_client.cancel(target)
+
+    def _report_swarmterm_failure(self, text: str, reason: str) -> bool:
+        copied = self.copy_text(text)
+        where = "kept on the clipboard" if copied else "could not be copied"
+        message = f"Swarmterm did not take the dictation ({reason}) - text {where}."
+        print(f"   ⚠ {message}")
+        if self.on_delivery_blocked:
+            try:
+                self.on_delivery_blocked(message)
+            except Exception as e:
+                self.logger.error(f"Failed to report blocked delivery: {e}")
+        return False
+
+    def _deliver_to_swarmterm(self, target, text: str, use_auto_enter: bool) -> bool:
+        ok, reason = self.swarmterm_client.insert(target, text, use_auto_enter)
+        if not ok:
+            return self._report_swarmterm_failure(text, reason or "rejected")
+        if self.copy_to_clipboard:
+            pyperclip.copy(text)
+        print("   ✓ Inserted into Swarmterm as a draft")
+        return True
+
     def send_enter_key(self) -> bool:
         try:
             self.logger.info("Sending ENTER key to active application")
@@ -175,6 +233,9 @@ class ClipboardManager:
                               use_auto_enter: bool = False) -> bool:
 
         try:
+            target = self._take_swarmterm_target() if self.auto_paste else None
+            if target is not None:
+                return self._deliver_to_swarmterm(target, transcribed_text, use_auto_enter)
             if self.auto_paste:
                 success = self.execute_delivery(transcribed_text)
                 if success and use_auto_enter:
