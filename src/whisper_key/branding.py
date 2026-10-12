@@ -7,3 +7,4 @@ DEFAULT_MODEL = "large-v3-turbo"
 DEFAULT_LANGUAGE = "de"
 LEGACY_INSTANCE_NAME = "WhisperKeyLocal"
 UPSTREAM_UPDATE_CHECK = False
+BUILD_SUFFIX = "+bk"

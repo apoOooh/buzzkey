@@ -64,3 +64,15 @@ def test_buzzkey_never_installs_upstream_releases():
     assert branding.UPSTREAM_UPDATE_CHECK is False
     source = inspect.getsource(main.main)
     assert "if UPSTREAM_UPDATE_CHECK:\n            check_for_updates(" in source
+
+
+def test_buzzkey_prunes_only_its_own_pyapp_environments(tmp_path, monkeypatch):
+    from whisper_key import utils
+    hash_dir = tmp_path / "data" / "whisper-key-local" / "123"
+    for name in ("1.9.0b1", "1.9.0+bk.1", "1.9.1+bk.1"):
+        (hash_dir / name).mkdir(parents=True)
+        (hash_dir / name / "pyvenv.cfg").write_text("x")
+    monkeypatch.setenv("PYAPP", "1")
+    monkeypatch.setattr(utils.sys, "prefix", str(hash_dir / "1.9.1+bk.1"))
+    assert utils.prune_stale_pyapp_envs() == ["1.9.0+bk.1"]
+    assert (hash_dir / "1.9.0b1").exists()

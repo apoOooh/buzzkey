@@ -6,6 +6,7 @@ import sys
 import importlib.resources
 import tomllib
 from pathlib import Path
+from .branding import BUILD_SUFFIX
 
 class OptionalComponent:
     def __init__(self, component):
@@ -116,8 +117,11 @@ def prune_stale_pyapp_envs():
     if hash_dir.parent.name != 'whisper-key-local' or hash_dir.parent.parent.name != 'data':
         return []
 
+    own_family = BUILD_SUFFIX in current_env.name
     removed = []
     for sibling in hash_dir.iterdir():
+        if own_family and BUILD_SUFFIX not in sibling.name:
+            continue
         if sibling.is_dir() and sibling != current_env and (sibling / 'pyvenv.cfg').is_file():
             shutil.rmtree(sibling, ignore_errors=True)
             if not sibling.exists():
