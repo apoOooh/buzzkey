@@ -266,3 +266,11 @@ def test_cancel_on_a_held_session_is_tagged_and_closes(tmp_path):
     cancel = pipe.conns[0].sent[-1]
     assert cancel["op"] == "cancel" and cancel["pin"] == "p1" and cancel["requestId"]
     assert pipe.conns[0].closed
+
+
+def test_unsolicited_line_is_not_taken_as_the_next_answer(tmp_path):
+    client, pipe = scripted_client(tmp_path, modern)
+    target = client.begin()
+    pipe.conns[0].push({"v": 1, "ok": False, "reason": "stray"})
+    threading.Event().wait(0.1)
+    assert client.insert(target, "hello", False) == (True, None)

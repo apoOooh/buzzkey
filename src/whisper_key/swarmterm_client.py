@@ -167,6 +167,17 @@ class DictationSession:
         with self._lock:
             if self._closed:
                 raise SwarmtermError("connection closed")
+            # Anything queued now arrived while no request was open: never
+            # let it pass as the answer to this one. A queued error means
+            # the reader has ended.
+            while True:
+                try:
+                    stale = self._answers.get_nowait()
+                except queue.Empty:
+                    break
+                if isinstance(stale, Exception):
+                    self._closed = True
+                    raise stale
             self._transport.send_line(
                 json.dumps({"v": PROTOCOL_VERSION, "token": self._token, **payload}), timeout_seconds)
             try:
