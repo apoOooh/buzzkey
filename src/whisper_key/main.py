@@ -24,7 +24,7 @@ from .runtime_options import ONNX_ASR, apply_onnx_runtime_selection, apply_runti
 from .voice_activity_detection import VadManager
 from .clipboard_manager import ClipboardManager
 from .swarmterm_client import SwarmtermClient
-from .branding import APP_NAME, INSTANCE_NAME, LEGACY_INSTANCE_NAME
+from .branding import APP_NAME, INSTANCE_NAME, LEGACY_INSTANCE_NAME, UPSTREAM_UPDATE_CHECK
 from .platform import instance_lock, dialogs
 from .migration import migrate_legacy_settings
 from .platform import paths as platform_paths
@@ -527,7 +527,8 @@ def main():
         logger = logging.getLogger(__name__)
         setup_exception_handler()
 
-        check_for_updates(config_manager, test_mode=args.test)
+        if UPSTREAM_UPDATE_CHECK:
+            check_for_updates(config_manager, test_mode=args.test)
         if not args.test:
             threading.Thread(target=prune_stale_envs_in_background, args=(logger,), daemon=True).start()
         refresh_autostart(logger)

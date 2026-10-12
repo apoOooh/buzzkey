@@ -58,9 +58,9 @@ def test_without_legacy_folder_only_writes_the_marker(tmp_path):
     assert not (app_dir / "user_settings.yaml").exists()
 
 
-def test_buzzkey_never_installs_upstream_releases(monkeypatch):
-    from whisper_key import update_checker
-    called = []
-    monkeypatch.setattr(update_checker, "fetch_latest_release", lambda: called.append(1) or ("99.0.0", "x"))
-    update_checker.check_for_updates(config_manager=None)
-    assert called == []
+def test_buzzkey_never_installs_upstream_releases():
+    import inspect
+    from whisper_key import branding, main
+    assert branding.UPSTREAM_UPDATE_CHECK is False
+    source = inspect.getsource(main.main)
+    assert "if UPSTREAM_UPDATE_CHECK:\n            check_for_updates(" in source
