@@ -366,6 +366,9 @@ class ConfigManager:
     def get_post_processing_config(self) -> Dict[str, Any]:
         return self.config.get('post_processing', {}).copy()
 
+    def get_swarmterm_config(self) -> Dict[str, Any]:
+        return self.config.get('swarmterm', {}).copy()
+
     def get_voice_commands_config(self) -> Dict[str, Any]:
         return self.config.get('voice_commands', {}).copy()
 
