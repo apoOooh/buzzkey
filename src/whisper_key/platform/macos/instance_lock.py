@@ -29,3 +29,6 @@ def release_lock(handle):
         except:
             pass
     _lock_file = None
+
+def is_held(app_name: str) -> bool:
+    return False

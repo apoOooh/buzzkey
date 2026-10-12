@@ -24,6 +24,10 @@ from .runtime_options import ONNX_ASR, apply_onnx_runtime_selection, apply_runti
 from .voice_activity_detection import VadManager
 from .clipboard_manager import ClipboardManager
 from .swarmterm_client import SwarmtermClient
+from .branding import APP_NAME, INSTANCE_NAME, LEGACY_INSTANCE_NAME
+from .platform import instance_lock, dialogs
+from .migration import migrate_legacy_settings
+from .platform import paths as platform_paths
 from .platform import keyboard as platform_keyboard
 from .state_manager import StateManager
 from .terminal_title import TerminalTitle
@@ -497,11 +501,16 @@ def main():
     parser.add_argument('--test', action='store_true', help='Run as separate test instance')
     args = parser.parse_args()
 
-    instance_name = "WhisperKeyLocal_test" if args.test else "WhisperKeyLocal"
+    instance_name = f"{INSTANCE_NAME}_test" if args.test else INSTANCE_NAME
     mutex_handle = guard_against_multiple_instances(instance_name)
 
     mode_label = " [TEST]" if args.test else ""
-    print(f"Starting Whisper Key [{get_version()}]{mode_label}...")
+    print(f"Starting {APP_NAME} [{get_version()}]{mode_label}...")
+    if not args.test:
+        if instance_lock.is_held(LEGACY_INSTANCE_NAME):
+            dialogs.show_error(APP_NAME, "whisper-key is running. Quit it first - both apps would react to the same hotkeys.")
+            sys.exit(0)
+        migrate_legacy_settings(platform_paths.get_app_data_path())
     
     shutdown_event = threading.Event()
     setup_signal_handlers(shutdown_event)
@@ -616,7 +625,7 @@ def main():
                     return
                 clipboard_manager.update_auto_paste(False)
 
-        print("🚀 Whisper Key ready!")
+        print(f"🚀 {APP_NAME} ready!")
         state_manager.play_ready_sound()
         config_manager.print_startup_hotkey_instructions()
         print("   [CTRL+C] to quit", flush=True)

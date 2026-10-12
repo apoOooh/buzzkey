@@ -421,7 +421,7 @@ system_tray: # System Tray Settings
     enabled: true
 
     # Tooltip text when hovering over tray icon
-    tooltip: Whisper Key
+    tooltip: buzzkey
 
 floating_widget: # Floating Recording Button (Windows only)
     # Show an always-on-top button that starts/stops recording with a mouse click

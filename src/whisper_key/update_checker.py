@@ -6,6 +6,7 @@ import urllib.error
 
 from .terminal_ui import BOLD_GREEN, BOLD_RED, RESET, prompt_choice
 from .utils import get_version, restart_or_exit
+from .branding import UPSTREAM_UPDATE_CHECK
 
 RELEASES_URL = "https://api.github.com/repos/SesioN/whisper-key-local/releases/latest"
 RELEASES_TIMEOUT = 3
@@ -37,6 +38,8 @@ def is_newer(latest, current):
 
 
 def check_for_updates(config_manager, test_mode=False):
+    if not UPSTREAM_UPDATE_CHECK:
+        return
     version = get_version()
     is_dev = version.endswith("-dev") or test_mode
 

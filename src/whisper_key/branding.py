@@ -1,0 +1,9 @@
+APP_NAME = "buzzkey"
+APP_DIR_NAME = "buzzkey"
+LEGACY_APP_DIR_NAME = "whisperkey"
+INSTANCE_NAME = "buzzkey"
+AUTOSTART_VALUE_NAME = "buzzkey"
+DEFAULT_MODEL = "large-v3-turbo"
+DEFAULT_LANGUAGE = "de"
+LEGACY_INSTANCE_NAME = "WhisperKeyLocal"
+UPSTREAM_UPDATE_CHECK = False

@@ -11,6 +11,7 @@ from ctypes import wintypes
 from PIL import Image, ImageTk
 
 from .utils import resolve_asset_path
+from .branding import APP_NAME
 
 WINDOW_WIDTH = 440
 WINDOW_HEIGHT = 260
@@ -81,7 +82,7 @@ class LoadingScreen:
         self._window_thread = None
         self._frames = []
         self._animation_epoch_ms = 0
-        self._status_text = "Starting Whisper Key..."
+        self._status_text = f"Starting {APP_NAME}..."
         self._status_since = time.monotonic()
 
     def show(self):
@@ -128,7 +129,7 @@ class LoadingScreen:
 
     def _build_window(self, root):
         root.overrideredirect(True)
-        root.title("Whisper Key")
+        root.title(APP_NAME)
 
         x = (root.winfo_screenwidth() - WINDOW_WIDTH) // 2
         y = (root.winfo_screenheight() - WINDOW_HEIGHT) // 2
