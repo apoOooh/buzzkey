@@ -2,6 +2,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from .branding import APP_DIR_NAME
 
 CPU = "cpu"
 CUDA = "cuda"
@@ -36,7 +37,7 @@ def get_runtimes_dir() -> Path:
     override = os.environ.get("WHISPERKEY_RUNTIMES_DIR")
     if override:
         return Path(override)
-    return Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "whisperkey" / "runtimes"
+    return Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / APP_DIR_NAME / "runtimes"
 
 
 def get_runtime_dir(runtime_key: str) -> Path:

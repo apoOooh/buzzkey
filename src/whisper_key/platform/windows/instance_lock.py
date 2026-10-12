@@ -12,3 +12,11 @@ def acquire_lock(app_name: str):
 
 def release_lock(handle):
     pass  # Mutex is released automatically when process exits
+
+def is_held(app_name: str) -> bool:
+    try:
+        handle = win32event.OpenMutex(win32event.SYNCHRONIZE, False, f"{app_name}_SingleInstance")
+    except Exception:
+        return False
+    win32api.CloseHandle(handle)
+    return True

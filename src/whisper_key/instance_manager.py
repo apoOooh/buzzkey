@@ -6,7 +6,7 @@ from .platform import instance_lock
 
 logger = logging.getLogger(__name__)
 
-def guard_against_multiple_instances(app_name: str = "WhisperKeyLocal"):
+def guard_against_multiple_instances(app_name: str = "buzzkey"):
     try:
         mutex_handle = instance_lock.acquire_lock(app_name)
 

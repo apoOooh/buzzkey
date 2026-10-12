@@ -2,6 +2,7 @@ import ctypes
 import ctypes.wintypes as wintypes
 import os
 import sys
+from ...branding import APP_NAME
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -58,7 +59,7 @@ def _set_icon():
 
 
 def _configure_console():
-    kernel32.SetConsoleTitleW("Whisper Key")
+    kernel32.SetConsoleTitleW(APP_NAME)
     _set_icon()
 
     handle = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)

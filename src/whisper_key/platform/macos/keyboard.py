@@ -41,6 +41,10 @@ def validate_delivery_method(method: str) -> str:
     return method
 
 
+def get_foreground_process_id():
+    return None
+
+
 def is_foreground_input_blocked() -> bool:
     return False
 

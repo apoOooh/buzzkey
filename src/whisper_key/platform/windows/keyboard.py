@@ -143,6 +143,15 @@ def _process_integrity_level(process_handle):
         kernel32.CloseHandle(token)
 
 
+def get_foreground_process_id():
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return None
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return pid.value or None
+
+
 def is_foreground_input_blocked() -> bool:
     hwnd = user32.GetForegroundWindow()
     if not hwnd:

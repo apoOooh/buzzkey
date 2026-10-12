@@ -3,11 +3,13 @@ import sys
 import winreg
 from pathlib import Path
 
+from ...branding import AUTOSTART_VALUE_NAME
+
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 STARTUP_APPROVED_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
 STARTUP_APPROVED_DISABLED_FLAG = 0x01
 STARTUP_SETTINGS_URI = "ms-settings:startupapps"
-VALUE_NAME = "WhisperKey"
+VALUE_NAME = AUTOSTART_VALUE_NAME
 CONSOLE_SUFFIX = "-console"
 
 
