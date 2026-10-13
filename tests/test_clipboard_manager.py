@@ -95,3 +95,30 @@ def test_failed_restore_is_logged(manager, caplog):
         manager._clipboard_paste("dictated")
         time.sleep(0.35)
     assert "could not be restored" in caplog.text
+
+
+def test_locked_clipboard_at_startup_does_not_abort(manager, monkeypatch):
+    manager, _, _ = manager
+    calls = {"n": 0}
+
+    def locked():
+        calls["n"] += 1
+        raise clipboard_module.pyperclip.PyperclipWindowsException("Error calling OpenClipboard")
+
+    monkeypatch.setattr(clipboard_module.pyperclip, "paste", locked)
+    assert manager._test_clipboard_access(attempts=3, delay=0) is False
+    assert calls["n"] == 3
+
+
+def test_clipboard_released_during_retry_passes(manager, monkeypatch):
+    manager, _, _ = manager
+    results = iter([RuntimeError("busy"), "ok"])
+
+    def flaky():
+        r = next(results)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+    monkeypatch.setattr(clipboard_module.pyperclip, "paste", flaky)
+    assert manager._test_clipboard_access(attempts=3, delay=0) is True
