@@ -4,6 +4,14 @@ buzzkey is a fork of [whisper-key-local](https://github.com/SesioN/whisper-key-l
 `<upstream version>+bk.<n>`; upstream changes are listed in `CHANGELOG.md`. Release tags are
 `buzzkey-<upstream version>-bk.<n>`.
 
+## [1.9.1+bk.4]
+
+Based on whisper-key-local 1.9.1.
+
+- **Startup no longer fails on a busy clipboard:** if another app holds the clipboard while
+  buzzkey starts (typical at logon), buzzkey retries briefly and then starts anyway instead of
+  exiting silently.
+
 ## [1.9.1+bk.3]
 
 Based on whisper-key-local 1.9.1.
