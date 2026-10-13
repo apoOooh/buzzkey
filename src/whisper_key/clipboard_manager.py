@@ -46,14 +46,20 @@ class ClipboardManager:
             self._test_clipboard_access()
         self._print_status()
 
-    def _test_clipboard_access(self):
-        try:
-            pyperclip.paste()
-            self.logger.info("Clipboard access test successful")
-
-        except Exception as e:
-            self.logger.error(f"Clipboard access test failed: {e}")
-            raise
+    def _test_clipboard_access(self, attempts=5, delay=0.2):
+        # Another process may hold the clipboard open for a moment (common at
+        # logon when autostart apps launch together). That must not kill the
+        # app: retry briefly, then start anyway and let each copy report.
+        for attempt in range(1, attempts + 1):
+            try:
+                pyperclip.paste()
+                self.logger.info("Clipboard access test successful")
+                return True
+            except Exception as e:
+                if attempt == attempts:
+                    self.logger.warning(f"Clipboard access test failed, continuing: {e}")
+                    return False
+                time.sleep(delay)
 
     def _print_status(self):
         hotkey_display = self.paste_hotkey.upper()
