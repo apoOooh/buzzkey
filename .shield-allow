@@ -1,0 +1,9 @@
+# Upstream-Inhalte (whisper-key-local), bewusst unverändert übernommen
+# Abtastrate in config.defaults.yaml: Zahl mit Einheit, keine Postleitzahl
+16000\sHz.{0,20}
+# Autor-Mail des Upstream-Projekts (pyproject.toml)
+pinwang@gmail.com
+# Beispielwert der type-Aktion (README, Doku, commands.defaults.yaml)
+user@example.com
+# Testfall: URL mit Zugangsdaten muss abgelehnt werden (test_update_checker.py)
+secret@release-assets.githubusercontent.com
