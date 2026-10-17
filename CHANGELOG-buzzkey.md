@@ -6,6 +6,10 @@ buzzkey is a fork of [whisper-key-local](https://github.com/SesioN/whisper-key-l
 
 ## [Unreleased]
 
+## [1.9.6+bk.1]
+
+Based on whisper-key-local 1.9.6.
+
 - **Upstream whisper-key 1.9.6** merged from the release tag `v1.9.6` (1.9.2 to 1.9.6:
   pre-roll toggle, beam size, Vulkan install fixes, return to original window). Version
   `1.9.6+bk.1`. Dictation into Swarmterm still goes over the pipe first; the new refocus
