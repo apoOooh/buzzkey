@@ -6,6 +6,10 @@ buzzkey is a fork of [whisper-key-local](https://github.com/SesioN/whisper-key-l
 
 ## [Unreleased]
 
+- **Upstream whisper-key 1.9.6** merged from the release tag `v1.9.6` (1.9.2 to 1.9.6:
+  pre-roll toggle, beam size, Vulkan install fixes, return to original window). Version
+  `1.9.6+bk.1`. Dictation into Swarmterm still goes over the pipe first; the new refocus
+  only applies to the clipboard/paste path.
 - **Announcements share one voice with Swarmterm** (BUZ-4, Swarmterm SWA-66): Swarmterm
   speaks "<pane>: fertig" itself. buzzkey negotiates `tts`, silences Swarmterm's voice before
   its microphone opens (`tts_stop`, answered on silence) and only speaks with the opt-in

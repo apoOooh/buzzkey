@@ -10,6 +10,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   and Stop in the pane discards the recording. Older Swarmterm builds are
   detected and used as before.
 
+## [1.9.6] - 2026-10-17
+
+### Fixed
+- **Return to original window** pasted into nothing in apps with an embedded browser view (Tauri/WebView2, Electron, Chromium): keyboard focus is now put back on the exact control that had it, even when that control belongs to another process
+- Refocusing retries for up to half a second and unlocks the Windows foreground lock when the first attempt is refused, instead of giving up after 50 ms
+- Auto-paste waits for the hotkey's modifier keys (Ctrl, Alt, Shift, Win) to be released, so the app does not receive Win+V or Ctrl+Alt+V instead of Ctrl+V
+
+### Added
+- `clipboard.restore_focus_settle_delay` (default 0.2 s): wait after a refocus before pasting
+- The log records the window a recording started in, every refocus attempt and the window that receives the text
+
+## [1.9.5] - 2026-10-16
+
+### Added
+- **Return to original window** - auto-paste goes to the window that was focused when recording started, even if focus moved meanwhile; if that window is gone the text is copied to the clipboard. Auto-enter is skipped if focus moves away during paste. Retrying a failed recording pastes into the window focused at retry time. On by default, toggle in the tray or `clipboard.restore_focus` (Windows)
+
+## [1.9.4] - 2026-10-15
+
+### Added
+- **Beam size in the tray** - Model > Beam size (1, 2, 3, 5) trades accuracy for speed and video memory
+- The Vulkan install measures the largest beam size that fits in the GPU's free video memory and lowers `whisper.beam_size` to it
+
+### Fixed
+- The Vulkan GPU check failed with out-of-memory on GPUs with little free video memory; when transcription runs out of video memory the app now suggests a lower beam size or a smaller model
+
+## [1.9.3] - 2026-10-15
+
+### Fixed
+- Vulkan runtime install failed with "CMake could not be installed" when winget put CMake somewhere other than `C:\Program Files\CMake`; CMake and the Vulkan SDK are now found via the registry PATH/variables and per-user install folders
+- Re-running the Vulkan install failed when winget reported the package as already installed; those results now count as success
+- A failed install command crashed with "sequence index must be integer, not 'slice'" instead of showing the command's error output
+
+## [1.9.2] - 2026-10-14
+
+### Added
+- **Pre-roll toggle in the tray** - "Pre-roll (keep words before shortcut)" turns the pre-roll buffer on or off (`audio.pre_roll_enabled`, default on); off also stops keeping the microphone open in the background
+
+### Fixed
+- The no-terminal Windows exe failed to start with "Unable to create process using ...pythonw.exe" when Windows 11 Smart App Control blocked the unsigned `pythonw.exe`; it now launches `python.exe` with a hidden console
+
 ## [1.9.1] - 2026-10-12
 
 ### Fixed
