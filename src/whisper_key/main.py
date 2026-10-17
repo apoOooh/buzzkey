@@ -181,7 +181,9 @@ def setup_clipboard_manager(clipboard_config):
         copy_to_clipboard=clipboard_config['copy_to_clipboard'],
         type_auto_enter_delay=clipboard_config['type_auto_enter_delay'],
         type_auto_enter_delay_per_100_chars=clipboard_config['type_auto_enter_delay_per_100_chars'],
-        macos_key_simulation_delay=clipboard_config['macos_key_simulation_delay']
+        macos_key_simulation_delay=clipboard_config['macos_key_simulation_delay'],
+        restore_focus=clipboard_config.get('restore_focus', True),
+        restore_focus_settle_delay=clipboard_config.get('restore_focus_settle_delay', 0.2)
     )
 
 def setup_swarmterm_client(swarmterm_config):
@@ -610,12 +612,23 @@ def main():
         clipboard_manager.on_delivery_blocked = system_tray.notify
         if clipboard_manager.swarmterm_client is not None:
             clipboard_manager.swarmterm_client.on_user_cancel = state_manager.handle_remote_cancel
-            announce = config_manager.get_swarmterm_config().get('announce_turns', False)
+            swarmterm_config = config_manager.get_swarmterm_config()
+            announce = swarmterm_config.get('announce_turns', False)
+            fallback_voice = announce and swarmterm_config.get('fallback_voice', False)
+            announcer = None
+            if fallback_voice and IS_WINDOWS:
+                from .announcer import Announcer
+                # Silent while recording or transcribing (half-duplex).
+                announcer = Announcer(busy=lambda: state_manager.get_current_state() in ("recording", "processing"))
+                announcer.start()
 
             def on_turn(e):
-                # Stage 1 of the Swarmterm status feed: logged only, read aloud with BUZ-M4.
-                if announce:
-                    logger.info(f"Swarmterm: {e.pane_name} {e.kind.replace('_', ' ')}")
+                if not announce:
+                    return
+                logger.info(f"Swarmterm: {e.pane_name} {e.kind.replace('_', ' ')}")
+                from .announcer import announcement, should_speak
+                if announcer is not None and should_speak(e.tts_handled, fallback_voice):
+                    announcer.say(e.terminal_id, announcement(e.pane_name, e.agent, e.kind))
 
             def on_quit():
                 # Swarmterm's Settings -> Voice asked (Quit / update): the
@@ -625,7 +638,15 @@ def main():
 
             # Always held: it also carries Swarmterm's `quit` request and
             # shows buzzkey as connected in Settings -> Voice.
-            TurnFeed(clipboard_manager.swarmterm_client, on_turn, on_quit=on_quit).start()
+            turn_feed = TurnFeed(clipboard_manager.swarmterm_client, on_turn, on_quit=on_quit)
+            turn_feed.start()
+
+            def before_recording():
+                if announcer is not None:
+                    announcer.stop()
+                turn_feed.silence_swarmterm()
+
+            state_manager.before_recording = before_recording
         floating_widget = setup_floating_widget(config_manager, state_manager)
         if floating_widget:
             audio_recorder.on_audio_level = floating_widget.set_level
