@@ -23,7 +23,7 @@ from .whisper_engine import create_whisper_engine
 from .runtime_options import ONNX_ASR, apply_onnx_runtime_selection, apply_runtime_selection, resolve_cpu_threads
 from .voice_activity_detection import VadManager
 from .clipboard_manager import ClipboardManager
-from .swarmterm_client import SwarmtermClient
+from .swarmterm_client import SwarmtermClient, TurnFeed
 from .branding import APP_NAME, INSTANCE_NAME, LEGACY_INSTANCE_NAME, UPSTREAM_UPDATE_CHECK
 from .platform import instance_lock, dialogs
 from .migration import migrate_legacy_settings
@@ -600,6 +600,10 @@ def main():
         clipboard_manager.on_delivery_blocked = system_tray.notify
         if clipboard_manager.swarmterm_client is not None:
             clipboard_manager.swarmterm_client.on_user_cancel = state_manager.handle_remote_cancel
+            if config_manager.get_swarmterm_config().get('announce_turns', False):
+                # Stage 1 of the Swarmterm status feed: logged only, read aloud with BUZ-M4.
+                TurnFeed(clipboard_manager.swarmterm_client,
+                         lambda e: logger.info(f"Swarmterm: {e.pane_name} {e.kind.replace('_', ' ')}")).start()
         floating_widget = setup_floating_widget(config_manager, state_manager)
         if floating_widget:
             audio_recorder.on_audio_level = floating_widget.set_level

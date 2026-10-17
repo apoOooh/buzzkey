@@ -523,6 +523,12 @@ swarmterm: # Dictation into Swarmterm panes
         - "com.apooooh.swarmterm.gn"
         - "de.gn.swarmterm.dev"
 
+    # Receive "agent finished / needs input" from Swarmterm (needs Settings -> Voice ->
+    # "Announce finished agents" there). For now only logged; spoken output follows.
+    # true = keep a status feed open to every running Swarmterm
+    # false = no feed
+    announce_turns: false
+
 voice_commands: # Voice Command Settings
     # Enable/disable voice commands feature
     # true = register command hotkey and load commands file
