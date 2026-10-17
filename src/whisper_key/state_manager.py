@@ -84,6 +84,8 @@ class StateManager:
         self.floating_widget_available = False
 
         self.is_processing = False
+        # Set by main (BUZ-4); runs synchronously before a recording starts.
+        self.before_recording = None
         self.is_model_loading = False
         self.is_muted = False
         self.last_transcription = None
@@ -450,6 +452,13 @@ class StateManager:
             self._auto_triggered_recording = auto_triggered
 
     def _begin_recording(self, auto_triggered: bool = False):
+        # BUZ-4: silence every announcement voice before the mic opens, so
+        # a dictation never records Swarmterm's or our own speech.
+        if self.before_recording is not None:
+            try:
+                self.before_recording()
+            except Exception as e:
+                logging.getLogger(__name__).error(f"before_recording failed: {e}")
         self._set_auto_triggered_recording(auto_triggered)
         success = self.audio_recorder.start_recording(voice_activated=auto_triggered)
 

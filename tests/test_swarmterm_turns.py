@@ -45,7 +45,7 @@ def test_subscribes_pings_on_idle_and_delivers_turns_in_order():
     assert sub.open() == 4
     sub.pump(got.append)
     hello, subscribe, ping = transport.sent
-    assert hello["op"] == "hello" and hello["capabilities"] == ["turns", "quit"] and hello["token"] == "t" * 64
+    assert hello["op"] == "hello" and hello["capabilities"] == ["turns", "quit", "tts"] and hello["token"] == "t" * 64
     assert subscribe["op"] == "subscribe" and ping["op"] == "ping"
     assert [(e.kind, e.pane_name, e.seq) for e in got] == [("done", "Refactor", 5), ("needs_input", "Refactor", 6)]
     assert transport.closed

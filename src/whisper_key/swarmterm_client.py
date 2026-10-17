@@ -266,6 +266,25 @@ class SwarmtermClient:
             raise SwarmtermError("invalid response")
         return response
 
+    def tts_stop(self, endpoint: SwarmtermEndpoint) -> bool:
+        """hello("tts") + tts_stop on a short connection. True = silent."""
+        transport = self.transport_factory(endpoint.pipe, TTS_STOP_TIMEOUT_SECONDS)
+        try:
+            for payload in ({"op": "hello", "requestId": uuid.uuid4().hex, "proto": PROTO, "app": "buzzkey",
+                             "version": _app_version(), "capabilities": ["tts"]},
+                            {"op": "tts_stop", "requestId": uuid.uuid4().hex}):
+                transport.send_line(json.dumps({"v": PROTOCOL_VERSION, "token": endpoint.token, **payload}),
+                                    TTS_STOP_TIMEOUT_SECONDS)
+                answer = json.loads(transport.read_line(TTS_STOP_TIMEOUT_SECONDS))
+                if not isinstance(answer, dict) or not answer.get("ok"):
+                    return False
+            return True
+        except (SwarmtermError, ValueError) as e:
+            self.logger.debug(f"Swarmterm tts_stop: {e}")
+            return False
+        finally:
+            transport.close()
+
     def _handle_cancelled(self, pin: str, reason: str):
         if reason == "user" and self.on_user_cancel is not None:
             try:
@@ -374,7 +393,11 @@ class SwarmtermClient:
 # "quit" (Swarmterm SWA-42): Settings -> Voice may ask buzzkey to quit, e.g.
 # before an update. Arrives as a push on this feed; buzzkey then shuts down
 # like its tray's Quit.
-FEED_CAPABILITIES = ["turns", "quit"]
+# "tts" (Swarmterm SWA-66): pushes carry `ttsHandled` (Swarmterm speaks the
+# event itself or dropped it on purpose) and `tts_stop` silences its voice.
+FEED_CAPABILITIES = ["turns", "quit", "tts"]
+# `tts_stop` is answered once Swarmterm's voice is silent (~150 ms).
+TTS_STOP_TIMEOUT_SECONDS = 0.5
 # Swarmterm closes a silent feed after 90 s; a ping every 30 s keeps it.
 PING_INTERVAL_SECONDS = 30.0
 FEED_OPEN_TIMEOUT_SECONDS = 2.0
@@ -390,6 +413,9 @@ class TurnEvent:
     agent: str
     kind: str
     seq: int
+    # Swarmterm took this event (says it or dropped it on purpose). None =
+    # an older Swarmterm without the field: buzzkey decides on its own.
+    tts_handled: Optional[bool] = None
 
 
 def _parse_turn(message: dict) -> Optional[TurnEvent]:
@@ -400,7 +426,9 @@ def _parse_turn(message: dict) -> Optional[TurnEvent]:
     # Unknown kinds (a newer Swarmterm) are skipped, never guessed.
     if kind not in TURN_KINDS or not isinstance(seq, int) or isinstance(seq, bool):
         return None
-    return TurnEvent(terminal_id=terminal_id, pane_name=pane, agent=agent, kind=kind, seq=seq)
+    handled = message.get("ttsHandled")
+    return TurnEvent(terminal_id=terminal_id, pane_name=pane, agent=agent, kind=kind, seq=seq,
+                     tts_handled=handled if isinstance(handled, bool) else None)
 
 
 class TurnSubscription:
@@ -415,6 +443,8 @@ class TurnSubscription:
         self._endpoint = endpoint
         self._logger = logger or logging.getLogger(__name__)
         self._last_seq: Optional[int] = None
+        # Negotiated "tts": the server understands `tts_stop`.
+        self.tts = False
 
     def _send(self, payload: dict):
         self._transport.send_line(json.dumps({"v": PROTOCOL_VERSION, "token": self._endpoint.token, **payload}),
@@ -438,6 +468,7 @@ class TurnSubscription:
             if not hello.get("ok") or "turns" not in (hello.get("capabilities") or []):
                 self._transport.close()
                 return None
+            self.tts = "tts" in (hello.get("capabilities") or [])
             self._send({"op": "subscribe", "requestId": uuid.uuid4().hex})
             answer = self._answer()
         except SwarmtermError:
@@ -503,6 +534,8 @@ class TurnFeed:
         self._on_quit = on_quit
         self._transport_factory = transport_factory
         self._active: set[str] = set()
+        # Pipes whose Swarmterm negotiated "tts" (has a voice to silence).
+        self._tts_pipes: set[str] = set()
         self._lock = threading.Lock()
         self._stop = threading.Event()
 
@@ -527,6 +560,9 @@ class TurnFeed:
             transport = self._transport_factory(endpoint.pipe, FEED_OPEN_TIMEOUT_SECONDS)
             sub = TurnSubscription(transport, endpoint, self._client.logger)
             if sub.open() is not None:
+                if sub.tts:
+                    with self._lock:
+                        self._tts_pipes.add(endpoint.pipe)
                 sub.pump(self._on_turn, self._on_quit)
         except SwarmtermError as e:
             self._client.logger.debug(f"Swarmterm status feed: {e}")
@@ -537,6 +573,19 @@ class TurnFeed:
             self._stop.wait(FEED_DISCOVERY_SECONDS)
             with self._lock:
                 self._active.discard(endpoint.pipe)
+                self._tts_pipes.discard(endpoint.pipe)
+
+    def silence_swarmterm(self):
+        """Before a microphone opens: ask every Swarmterm with a voice to be
+        silent, and wait for its answer (sent on silence). Bounded; a slow
+        or vanished instance never holds up a recording for long."""
+        with self._lock:
+            pipes = set(self._tts_pipes)
+        if not pipes:
+            return
+        for endpoint in self._client._read_endpoints():
+            if endpoint.pipe in pipes:
+                self._client.tts_stop(endpoint)
 
 def _app_version() -> str:
     try:

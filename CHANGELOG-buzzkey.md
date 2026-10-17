@@ -4,6 +4,14 @@ buzzkey is a fork of [whisper-key-local](https://github.com/SesioN/whisper-key-l
 `<upstream version>+bk.<n>`; upstream changes are listed in `CHANGELOG.md`. Release tags are
 `buzzkey-<upstream version>-bk.<n>`.
 
+## [Unreleased]
+
+- **Announcements share one voice with Swarmterm** (BUZ-4, Swarmterm SWA-66): Swarmterm
+  speaks "<pane>: fertig" itself. buzzkey negotiates `tts`, silences Swarmterm's voice before
+  its microphone opens (`tts_stop`, answered on silence) and only speaks with the opt-in
+  `swarmterm.fallback_voice` — and then only events Swarmterm left to it (`ttsHandled` false
+  or missing). Status only; silent while recording or transcribing.
+
 ## [1.9.1+bk.5]
 
 Based on whisper-key-local 1.9.1.
