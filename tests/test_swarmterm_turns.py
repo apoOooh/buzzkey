@@ -45,7 +45,7 @@ def test_subscribes_pings_on_idle_and_delivers_turns_in_order():
     assert sub.open() == 4
     sub.pump(got.append)
     hello, subscribe, ping = transport.sent
-    assert hello["op"] == "hello" and hello["capabilities"] == ["turns"] and hello["token"] == "t" * 64
+    assert hello["op"] == "hello" and hello["capabilities"] == ["turns", "quit"] and hello["token"] == "t" * 64
     assert subscribe["op"] == "subscribe" and ping["op"] == "ping"
     assert [(e.kind, e.pane_name, e.seq) for e in got] == [("done", "Refactor", 5), ("needs_input", "Refactor", 6)]
     assert transport.closed
@@ -87,3 +87,18 @@ def test_a_failing_handler_does_not_end_the_feed():
     sub.open()
     sub.pump(handler)
     assert seen == [1, 2]
+
+
+def test_quit_push_calls_the_handler_and_the_feed_keeps_reading():
+    # Swarmterm SWA-42: Settings -> Voice asks buzzkey to quit over the feed.
+    transport = ScriptedTransport([HELLO_OK, {"v": 1, "ok": True, "seq": 0}, {"v": 1, "event": "quit"}, turn(1)])
+    quits, got = [], []
+    sub = TurnSubscription(transport, ENDPOINT)
+    sub.open()
+    sub.pump(got.append, lambda: quits.append(1))
+    assert quits == [1] and [e.seq for e in got] == [1]
+    # Without a handler a quit push is ignored like any unknown event.
+    transport = ScriptedTransport([HELLO_OK, {"v": 1, "ok": True, "seq": 0}, {"v": 1, "event": "quit"}])
+    sub = TurnSubscription(transport, ENDPOINT)
+    sub.open()
+    sub.pump(got.append)

@@ -101,6 +101,25 @@ jobs:
           ' CHANGELOG-buzzkey.md > release-notes.md
           test -s release-notes.md || { echo "No CHANGELOG-buzzkey.md section for ${{ needs.build-windows.outputs.version }}"; exit 1; }
 
+      # Swarmterm installs buzzkey only from releases whose SHA256SUMS.txt is
+      # signed with the key it has built in (Swarmterm SWA-42). Without the
+      # secret the release is published unsigned and Swarmterm skips it.
+      - name: Sign checksums
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          if [ -z "$MINISIGN_SECRET_KEY" ]; then
+            echo "::warning::MINISIGN_SECRET_KEY not set - release stays unsigned, Swarmterm will not offer it"
+            exit 0
+          fi
+          sudo apt-get install -y -qq minisign
+          umask 077
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/buzzkey.key"
+          minisign -S -s "$RUNNER_TEMP/buzzkey.key" -m release/SHA256SUMS.txt \
+            -t "buzzkey ${{ needs.build-windows.outputs.version }}"
+          rm -f "$RUNNER_TEMP/buzzkey.key"
+          test -s release/SHA256SUMS.txt.minisig
+
       - uses: softprops/action-gh-release@v2
         with:
           name: buzzkey ${{ needs.build-windows.outputs.version }}
