@@ -524,10 +524,17 @@ swarmterm: # Dictation into Swarmterm panes
         - "de.gn.swarmterm.dev"
 
     # Receive "agent finished / needs input" from Swarmterm (needs Settings -> Voice ->
-    # "Announce finished agents" there). For now only logged; spoken output follows.
+    # "Announce finished agents" there).
     # true = keep a status feed open to every running Swarmterm
     # false = no feed
     announce_turns: false
+
+    # Speak those announcements with a Windows voice when Swarmterm does not speak them
+    # itself (Swarmterm's own voice: Settings -> Voice -> "Speak announcements").
+    # Never both: buzzkey only speaks events Swarmterm left to it. Needs announce_turns.
+    # true = fallback voice on
+    # false = only Swarmterm speaks (default)
+    fallback_voice: false
 
 voice_commands: # Voice Command Settings
     # Enable/disable voice commands feature
