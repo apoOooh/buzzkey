@@ -4,6 +4,17 @@ buzzkey is a fork of [whisper-key-local](https://github.com/SesioN/whisper-key-l
 `<upstream version>+bk.<n>`; upstream changes are listed in `CHANGELOG.md`. Release tags are
 `buzzkey-<upstream version>-bk.<n>`.
 
+## [1.9.1+bk.5]
+
+Based on whisper-key-local 1.9.1.
+
+- **Swarmterm can install, quit and update buzzkey** (Settings → Voice): buzzkey keeps a
+  connection to every running Swarmterm, so it shows as connected there and quits cleanly when
+  Swarmterm asks (capability `quit`), e.g. before an update.
+- **`buzzkey-console --probe-hardware --json`** prints the suggested model and runtime for this
+  machine and exits; read-only, works next to a running buzzkey.
+- **Signed checksums:** releases carry `SHA256SUMS.txt.minisig` (minisign, key id EFAC892903260581).
+
 ## [1.9.1+bk.4]
 
 Based on whisper-key-local 1.9.1.

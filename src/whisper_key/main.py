@@ -23,7 +23,7 @@ from .whisper_engine import create_whisper_engine
 from .runtime_options import ONNX_ASR, apply_onnx_runtime_selection, apply_runtime_selection, resolve_cpu_threads
 from .voice_activity_detection import VadManager
 from .clipboard_manager import ClipboardManager
-from .swarmterm_client import SwarmtermClient
+from .swarmterm_client import SwarmtermClient, TurnFeed
 from .branding import APP_NAME, INSTANCE_NAME, LEGACY_INSTANCE_NAME, UPSTREAM_UPDATE_CHECK
 from .platform import instance_lock, dialogs
 from .migration import migrate_legacy_settings
@@ -499,7 +499,17 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--test', action='store_true', help='Run as separate test instance')
+    parser.add_argument('--probe-hardware', action='store_true',
+                        help='Print the suggested model for this machine and exit (read-only)')
+    parser.add_argument('--json', action='store_true', help='With --probe-hardware: print JSON')
     args = parser.parse_args()
+
+    # Before the single-instance guard: Swarmterm runs this next to a
+    # running buzzkey (Settings -> Voice), and it only reads.
+    if args.probe_hardware:
+        from .hardware_probe import probe_json
+        print(probe_json())
+        sys.exit(0)
 
     instance_name = f"{INSTANCE_NAME}_test" if args.test else INSTANCE_NAME
     mutex_handle = guard_against_multiple_instances(instance_name)
@@ -600,6 +610,22 @@ def main():
         clipboard_manager.on_delivery_blocked = system_tray.notify
         if clipboard_manager.swarmterm_client is not None:
             clipboard_manager.swarmterm_client.on_user_cancel = state_manager.handle_remote_cancel
+            announce = config_manager.get_swarmterm_config().get('announce_turns', False)
+
+            def on_turn(e):
+                # Stage 1 of the Swarmterm status feed: logged only, read aloud with BUZ-M4.
+                if announce:
+                    logger.info(f"Swarmterm: {e.pane_name} {e.kind.replace('_', ' ')}")
+
+            def on_quit():
+                # Swarmterm's Settings -> Voice asked (Quit / update): the
+                # same path as the tray's Quit.
+                logger.info("Swarmterm asked buzzkey to quit")
+                shutdown_event.set()
+
+            # Always held: it also carries Swarmterm's `quit` request and
+            # shows buzzkey as connected in Settings -> Voice.
+            TurnFeed(clipboard_manager.swarmterm_client, on_turn, on_quit=on_quit).start()
         floating_widget = setup_floating_widget(config_manager, state_manager)
         if floating_widget:
             audio_recorder.on_audio_level = floating_widget.set_level
