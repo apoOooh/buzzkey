@@ -24,6 +24,7 @@ from .clipboard_manager import ClipboardManager
 from .system_tray import SystemTray
 from .config_manager import ConfigManager
 from .text_postprocessor import TextPostProcessor
+from .prompt_enhancer import PromptEnhancer
 from .audio_feedback import AudioFeedback
 from .output_audio_control import OutputAudioControl
 from .utils import OptionalComponent
@@ -68,7 +69,8 @@ class StateManager:
                  audio_feedback: Optional[AudioFeedback] = None,
                  voice_command_manager: Optional[VoiceCommandManager] = None,
                  terminal_title: Optional[TerminalTitle] = None,
-                 output_audio_control: Optional[OutputAudioControl] = None):
+                 output_audio_control: Optional[OutputAudioControl] = None,
+                 prompt_enhancer: Optional[PromptEnhancer] = None):
 
         self.audio_recorder = audio_recorder
         self.whisper_engine = whisper_engine
@@ -79,6 +81,7 @@ class StateManager:
         self.output_audio_control = OptionalComponent(output_audio_control)
         self.vad_manager = vad_manager
         self.text_postprocessor = text_postprocessor
+        self.prompt_enhancer = prompt_enhancer
         self.voice_command_manager = voice_command_manager
         self.terminal_title = OptionalComponent(terminal_title)
         self.floating_widget = OptionalComponent(None)
@@ -605,6 +608,13 @@ class StateManager:
                 command_ok = self.voice_command_manager.execute_command(dictation_command, use_auto_enter)
                 self._show_outcome("success" if command_ok else "error")
                 return
+
+            if self.prompt_enhancer:
+                # After command matching: a spoken command must stay recognisable.
+                enhanced = self.prompt_enhancer.enhance(transcribed_text)
+                if enhanced != transcribed_text:
+                    print(f"   ✓ Enhanced: '{enhanced}'")
+                transcribed_text = enhanced
 
             if auto_triggered and not self._auto_trigger_paste:
                 success = self.clipboard_manager.copy_with_notification(transcribed_text)

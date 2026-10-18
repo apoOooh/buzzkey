@@ -32,6 +32,7 @@ from .platform import keyboard as platform_keyboard
 from .state_manager import StateManager
 from .terminal_title import TerminalTitle
 from .text_postprocessor import TextPostProcessor
+from .prompt_enhancer import PromptEnhancer
 from .system_tray import SystemTray
 from .audio_feedback import AudioFeedback
 from .output_audio_control import OutputAudioControl
@@ -168,6 +169,16 @@ def setup_text_postprocessor(post_processing_config):
     return TextPostProcessor(
         strip_trailing_period=post_processing_config.get('strip_trailing_period', False),
         corrections=post_processing_config.get('corrections') or {}
+    )
+
+def setup_prompt_enhancer(prompt_enhancer_config):
+    return PromptEnhancer(
+        enabled=prompt_enhancer_config.get('enabled', False),
+        url=prompt_enhancer_config.get('url') or '',
+        model=prompt_enhancer_config.get('model') or '',
+        timeout=prompt_enhancer_config.get('timeout', 8),
+        system_prompt=prompt_enhancer_config.get('system_prompt') or '',
+        min_words=prompt_enhancer_config.get('min_words', 4)
     )
 
 def setup_clipboard_manager(clipboard_config):
@@ -602,6 +613,7 @@ def main():
             audio_feedback=audio_feedback,
             vad_manager=vad_manager,
             text_postprocessor=text_postprocessor,
+            prompt_enhancer=setup_prompt_enhancer(config_manager.get_prompt_enhancer_config()),
             voice_command_manager=voice_command_manager,
             terminal_title=terminal_title,
             output_audio_control=output_audio_control
