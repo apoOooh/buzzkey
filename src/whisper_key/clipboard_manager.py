@@ -9,6 +9,7 @@ import pyperclip
 
 from .platform import clipboard, keyboard, window_style
 from .utils import parse_hotkey
+from .voice_address import parse_address
 
 MODIFIER_RELEASE_TIMEOUT_SECONDS = 1.0
 
@@ -44,6 +45,8 @@ class ClipboardManager:
         self._clipboard_lock = threading.RLock()
         self._pending_restore = None
         self.swarmterm_client = None
+        # BUZ-5: "Pane 2: ..." retargets a Swarmterm dictation.
+        self.voice_addressing = True
         self._swarmterm_target: Optional[Future] = None
         self._swarmterm_lock = threading.Lock()
         keyboard.set_delay(macos_key_simulation_delay)
@@ -297,7 +300,32 @@ class ClipboardManager:
                 self.logger.error(f"Failed to report blocked delivery: {e}")
         return False
 
+    def _retarget(self, target, text: str, use_auto_enter: bool):
+        """Apply a spoken pane address. Returns (text, auto_enter) to insert,
+        or a str reason to refuse the dictation."""
+        addressed = parse_address(text) if self.voice_addressing else None
+        if addressed is None or addressed.target is None:
+            return text, use_auto_enter
+        moved, reason = self.swarmterm_client.retarget(target, addressed.target)
+        if moved:
+            print(f"   ✓ Addressed to Swarmterm pane '{target.name or addressed.target}'")
+            return addressed.body, use_auto_enter or addressed.send
+        if reason == "cancelled-by-user" or reason == "ambiguous" or (addressed.explicit and reason != "address-unsupported"):
+            return reason or "rejected"
+        # "An der Stelle, ..." is ordinary speech: keep the original pane and text.
+        self.logger.info(f"No Swarmterm pane for spoken address ({reason}); keeping the focused pane")
+        return text, use_auto_enter
+
     def _deliver_to_swarmterm(self, target, text: str, use_auto_enter: bool) -> bool:
+        routed = self._retarget(target, text, use_auto_enter)
+        if isinstance(routed, str):
+            self.swarmterm_client.cancel(target)
+            if routed == "cancelled-by-user":
+                print("   ✗ Dictation discarded (stopped in Swarmterm)")
+                return False
+            self.logger.info(f"Swarmterm refused the spoken address: {routed}")
+            return self._report_swarmterm_failure(text, f"pane address: {routed}")
+        text, use_auto_enter = routed
         ok, reason = self.swarmterm_client.insert(target, text, use_auto_enter)
         if reason == "cancelled-by-user":
             # Stop in the Swarmterm pane after recording ended: the user
