@@ -4,6 +4,13 @@ buzzkey is a fork of [whisper-key-local](https://github.com/SesioN/whisper-key-l
 `<upstream version>+bk.<n>`; upstream changes are listed in `CHANGELOG.md`. Release tags are
 `buzzkey-<upstream version>-bk.<n>`.
 
+## [Unreleased]
+
+- **Enhance prompt (optional, off by default):** `prompt_enhancer` in the config rewrites a
+  dictation into a concise prompt through a local OpenAI-compatible LLM (llama.cpp's
+  llama-server). Loopback only, no proxy; voice commands are never rewritten, and any error or
+  timeout delivers the original text.
+
 ## [1.9.1+bk.4]
 
 Based on whisper-key-local 1.9.1.

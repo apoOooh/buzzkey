@@ -221,6 +221,21 @@ post_processing: # Text Post-Processing (applied to transcription output)
     #     amine absorber: [immune absorber]
     corrections: {}
 
+prompt_enhancer: # Rewrite dictations into a concise prompt via a local LLM (optional)
+    # Off by default. Needs an OpenAI-compatible chat endpoint such as llama.cpp's llama-server.
+    # Only http on loopback (127.0.0.1, localhost, ::1) is accepted; anything else disables it.
+    # Voice commands are never rewritten; any error keeps the original text.
+    enabled: false
+    url: http://127.0.0.1:8080/v1/chat/completions
+    # Model name sent to the server ("" = server default)
+    model: ""
+    # Seconds to wait for the rewrite before keeping the original text
+    timeout: 20
+    # Dictations with fewer words are delivered unchanged
+    min_words: 4
+    # Instruction for the LLM ("" = built-in default)
+    system_prompt: ""
+
 hotkey: # Hotkey Configuration
     # Easiest: tray menu > "Shortcuts..." (Windows) records and saves these for you.
     #
