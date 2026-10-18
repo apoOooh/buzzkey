@@ -582,7 +582,10 @@ class StateManager:
 
             if self.prompt_enhancer:
                 # After command matching: a spoken command must stay recognisable.
-                transcribed_text = self.prompt_enhancer.enhance(transcribed_text)
+                enhanced = self.prompt_enhancer.enhance(transcribed_text)
+                if enhanced != transcribed_text:
+                    print(f"   ✓ Enhanced: '{enhanced}'")
+                transcribed_text = enhanced
 
             if auto_triggered and not self._auto_trigger_paste:
                 success = self.clipboard_manager.copy_with_notification(transcribed_text)

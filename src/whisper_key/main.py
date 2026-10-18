@@ -176,7 +176,7 @@ def setup_prompt_enhancer(prompt_enhancer_config):
         enabled=prompt_enhancer_config.get('enabled', False),
         url=prompt_enhancer_config.get('url') or '',
         model=prompt_enhancer_config.get('model') or '',
-        timeout=prompt_enhancer_config.get('timeout', 20),
+        timeout=prompt_enhancer_config.get('timeout', 8),
         system_prompt=prompt_enhancer_config.get('system_prompt') or '',
         min_words=prompt_enhancer_config.get('min_words', 4)
     )

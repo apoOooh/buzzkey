@@ -64,3 +64,21 @@ def test_loopback_check():
     assert not is_loopback_url("https://127.0.0.1/x")
     assert not is_loopback_url("http://127.0.0.1.evil.com/x")
     assert not is_loopback_url("file:///etc/passwd")
+
+
+def test_think_block_is_stripped_and_unclosed_rejected():
+    post, _ = recorder(reply("<think>\nhmm, the user wants\n</think>\n\nSchreibe Tests für foo.py."))
+    assert PromptEnhancer(enabled=True, poster=post).enhance(TEXT) == "Schreibe Tests für foo.py."
+    post, _ = recorder(reply("<think>still thinking"))
+    assert PromptEnhancer(enabled=True, poster=post).enhance(TEXT) == TEXT
+
+
+def test_overlong_result_keeps_original_and_max_tokens_is_bounded():
+    post, calls = recorder(reply("word " * 2000))
+    assert PromptEnhancer(enabled=True, poster=post).enhance(TEXT) == TEXT
+    assert len(TEXT) < calls[0][1]["max_tokens"] <= len(TEXT) + 1024
+
+
+def test_string_false_stays_disabled():
+    assert not PromptEnhancer(enabled="false").enabled
+    assert PromptEnhancer(enabled="true").enabled
