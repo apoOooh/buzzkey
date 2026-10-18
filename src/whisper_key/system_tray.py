@@ -30,6 +30,7 @@ except ImportError:
 MODEL_STATE_SUFFIXES = {"download": " (download)", "install": " (install whisper.cpp)", "faster_whisper": " (CPU)"}
 RECORDING_MODES = (("toggle", "Toggle"), ("push_to_talk", "Push to talk"))
 FLOATING_WIDGET_STYLES = (("button", "Button"), ("orb", "Voice orb"))
+BEAM_SIZE_OPTIONS = ((1, "1 (fastest, least video memory)"), (2, "2"), (3, "3"), (5, "5 (most accurate)"))
 ORB_APPEARANCE_DEFAULTS = {"opacity": DEFAULT_IDLE_OPACITY, "vibrancy": 1.0, "hue": 0}
 MIN_ORB_OPACITY = 0.2
 HUE_TRACK_STEP_DEGREES = 15
@@ -125,12 +126,14 @@ class SystemTray:
                    self._current_recording_mode, self._set_recording_mode, style="segmented") if self.recording_mode_changer else None,
             Toggle("Voice-activated recording", lambda: self.state_manager.auto_trigger_enabled, self._set_auto_trigger) if self.state_manager.is_auto_trigger_available() else None,
             Action("Voice detection sensitivity...", self._open_vad_sensitivity_window, icon=ICON_SLIDERS) if self.state_manager.is_vad_sensitivity_window_available() else None,
+            Toggle("Pre-roll (keep words before shortcut)", lambda: self.state_manager.pre_roll_enabled, self._set_pre_roll) if self.state_manager.audio_recorder.pre_roll_seconds > 0 else None,
             Toggle("Audio feedback", self._is_audio_feedback_enabled, self._set_audio_feedback),
             Toggle("Mute system audio while recording", self._is_mute_output_enabled, self._set_mute_output),
             Toggle("Pause media while recording", self._is_pause_media_enabled, self._set_pause_media),
             Section("Output"),
             Toggle("Auto-paste", self._is_auto_paste_enabled, self._set_transcription_mode),
             Toggle("Copy to clipboard", self._is_copy_enabled, self._set_copy_to_clipboard, enabled=self._is_auto_paste_enabled),
+            Toggle("Return to original window", self._is_restore_focus_enabled, self._set_restore_focus, enabled=self._is_auto_paste_enabled) if IS_WINDOWS else None,
             Toggle("Voice commands in normal recordings", self._is_match_in_dictation_enabled, self._set_match_in_dictation) if self._is_voice_command_manager_enabled() else None,
             Section("Setup"),
             Submenu("Model", self._build_model_page, icon=ICON_MODEL, detail=self._model_detail),
@@ -234,6 +237,9 @@ class SystemTray:
             Choice("Model", self._model_options(is_model_loading), self._selected_model_key, self._select_model),
             Submenu("Language", self._build_language_page, detail=self._language_detail) if self.model_registry else None,
             *self._build_runtime_items(is_busy),
+            Choice("Beam size", [Option(beam_size, label) for beam_size, label in BEAM_SIZE_OPTIONS],
+                   self.state_manager.get_beam_size, self._set_beam_size)
+            if self.state_manager.get_beam_size() is not None else None,
         ]
 
     def _model_options(self, is_model_loading: bool) -> list:
@@ -489,6 +495,20 @@ class SystemTray:
     def _is_pause_media_enabled(self):
         return bool(self.config_manager.get_setting('output_audio', 'pause_media_while_recording'))
 
+    def _set_beam_size(self, beam_size: int):
+        try:
+            self.state_manager.update_beam_size(beam_size)
+        except Exception as e:
+            self.logger.error(f"Error setting beam size to {beam_size}: {e}")
+        self.refresh_menu()
+
+    def _set_pre_roll(self, enabled: bool):
+        try:
+            self.state_manager.update_pre_roll_enabled(enabled)
+        except Exception as e:
+            self.logger.error(f"Error setting pre-roll to {enabled}: {e}")
+        self.refresh_menu()
+
     def _set_pause_media(self, enabled: bool):
         try:
             self.state_manager.update_pause_media_while_recording(enabled)
@@ -516,6 +536,16 @@ class SystemTray:
 
     def _is_copy_enabled(self):
         return bool(self.config_manager.get_setting('clipboard', 'copy_to_clipboard')) or not self._is_auto_paste_enabled()
+
+    def _is_restore_focus_enabled(self):
+        return bool(self.config_manager.get_setting('clipboard', 'restore_focus'))
+
+    def _set_restore_focus(self, enabled: bool):
+        try:
+            self.state_manager.update_restore_focus(enabled)
+        except Exception as e:
+            self.logger.error(f"Error setting restore focus to {enabled}: {e}")
+        self.refresh_menu()
 
     def _set_copy_to_clipboard(self, enabled: bool):
         try:

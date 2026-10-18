@@ -11,6 +11,31 @@ buzzkey is a fork of [whisper-key-local](https://github.com/SesioN/whisper-key-l
   llama-server). Loopback only, no proxy; voice commands are never rewritten, and any error or
   timeout delivers the original text.
 
+## [1.9.6+bk.1]
+
+Based on whisper-key-local 1.9.6.
+
+- **Upstream whisper-key 1.9.6** merged from the release tag `v1.9.6` (1.9.2 to 1.9.6:
+  pre-roll toggle, beam size, Vulkan install fixes, return to original window). Version
+  `1.9.6+bk.1`. Dictation into Swarmterm still goes over the pipe first; the new refocus
+  only applies to the clipboard/paste path.
+- **Announcements share one voice with Swarmterm** (BUZ-4, Swarmterm SWA-66): Swarmterm
+  speaks "<pane>: fertig" itself. buzzkey negotiates `tts`, silences Swarmterm's voice before
+  its microphone opens (`tts_stop`, answered on silence) and only speaks with the opt-in
+  `swarmterm.fallback_voice` — and then only events Swarmterm left to it (`ttsHandled` false
+  or missing). Status only; silent while recording or transcribing.
+
+## [1.9.1+bk.5]
+
+Based on whisper-key-local 1.9.1.
+
+- **Swarmterm can install, quit and update buzzkey** (Settings → Voice): buzzkey keeps a
+  connection to every running Swarmterm, so it shows as connected there and quits cleanly when
+  Swarmterm asks (capability `quit`), e.g. before an update.
+- **`buzzkey-console --probe-hardware --json`** prints the suggested model and runtime for this
+  machine and exits; read-only, works next to a running buzzkey.
+- **Signed checksums:** releases carry `SHA256SUMS.txt.minisig` (minisign, key id EFAC892903260581).
+
 ## [1.9.1+bk.4]
 
 Based on whisper-key-local 1.9.1.
