@@ -548,6 +548,11 @@ swarmterm: # Dictation into Swarmterm panes
     # false = always use the normal paste/type delivery
     enabled: true
 
+    # Address a pane by voice: "Pane 2: ..." or "Pane Backend: ..." ("An Backend: ...") sends the
+    # dictation to that Swarmterm pane; ending with "... senden" / "... send" presses Enter (only if
+    # Swarmterm allows auto-Enter). Needs a Swarmterm with pane addressing; ambiguous names are refused.
+    voice_addressing: true
+
     # Swarmterm app ids whose voice-endpoint.json files are checked (installed app and dev build)
     app_ids:
         - "com.apooooh.swarmterm.gn"

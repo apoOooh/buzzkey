@@ -274,3 +274,51 @@ def test_unsolicited_line_is_not_taken_as_the_next_answer(tmp_path):
     pipe.conns[0].push({"v": 1, "ok": False, "reason": "stray"})
     threading.Event().wait(0.1)
     assert client.insert(target, "hello", False) == (True, None)
+
+
+def addressing(message):
+    rid = message.get("requestId")
+    if message["op"] == "hello":
+        return [{"v": 1, "requestId": rid, "ok": True, "proto": 2, "app": "swarmterm",
+                 "capabilities": ["indicator", "address"]}]
+    if message["op"] == "begin" and message.get("target") == "2":
+        return [{"v": 1, "requestId": rid, "ok": True, "pin": "p2", "name": "Backend"}]
+    if message["op"] == "begin" and message.get("target") == "same":
+        # Same pane again: Swarmterm supersedes the old pin before answering.
+        return [{"v": 1, "event": "cancelled", "pin": "p1", "reason": "superseded"},
+                {"v": 1, "requestId": rid, "ok": True, "pin": "p3", "name": "pane"}]
+    if message["op"] == "begin" and "target" in message:
+        return [{"v": 1, "requestId": rid, "ok": False, "reason": "ambiguous"}]
+    return modern(message)
+
+
+def test_retarget_takes_the_new_pin_then_drops_the_old(tmp_path):
+    client, pipe = scripted_client(tmp_path, addressing)
+    target = client.begin()
+    assert target.address
+    assert client.retarget(target, "2") == (True, None)
+    assert target.pin == "p2" and target.name == "Backend"
+    ops = [(m["op"], m.get("target"), m.get("pin")) for m in pipe.conns[0].sent]
+    assert ops == [("hello", None, None), ("begin", None, None), ("begin", "2", None), ("cancel", None, "p1")]
+    assert client.insert(target, "hi", False) == (True, None)
+
+
+def test_retarget_refusal_keeps_the_original_pin(tmp_path):
+    client, pipe = scripted_client(tmp_path, addressing)
+    target = client.begin()
+    assert client.retarget(target, "Backend") == (False, "ambiguous")
+    assert target.pin == "p1"
+
+
+def test_retarget_onto_the_same_pane_is_not_a_cancel(tmp_path):
+    client, pipe = scripted_client(tmp_path, addressing)
+    target = client.begin()
+    assert client.retarget(target, "same") == (True, None)
+    assert client.insert(target, "hi", False) == (True, None)
+
+
+def test_retarget_needs_the_address_capability(tmp_path):
+    client, _ = scripted_client(tmp_path, modern)
+    target = client.begin()
+    assert not target.address
+    assert client.retarget(target, "2") == (False, "address-unsupported")

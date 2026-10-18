@@ -459,3 +459,13 @@ def test_retry_uses_the_window_focused_at_retry_time(monkeypatch):
     assert manager.retry_failed_recording()
     wait_for_pipeline(manager)
     clipboard.deliver_transcription.assert_called_once_with("again", False, "retry-window")
+
+
+def test_prompt_enhancer_keeps_an_address_like_prefix_verbatim():
+    enhancer = MagicMock()
+    enhancer.enhance.side_effect = lambda text: text.upper()
+    manager, _, _, clipboard = make_state_manager(transcribe=lambda audio: "To be honest, das passt so", prompt_enhancer=enhancer)
+    clipboard.voice_addressing = True
+    manager._submit_transcription(Recording(np.ones(16000, dtype=np.float32), completed_analysis(True, 0.0)), False)
+    wait_for_pipeline(manager)
+    clipboard.deliver_transcription.assert_called_once_with("To be honest, DAS PASST SO", False, ANY)

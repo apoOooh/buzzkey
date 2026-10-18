@@ -595,6 +595,7 @@ def main():
         loading_screen.set_status("Finishing startup...")
         clipboard_manager = setup_clipboard_manager(clipboard_config)
         clipboard_manager.swarmterm_client = setup_swarmterm_client(config_manager.get_swarmterm_config())
+        clipboard_manager.voice_addressing = config_manager.get_swarmterm_config().get('voice_addressing', True) is not False
         audio_feedback = setup_audio_feedback(audio_feedback_config)
         output_audio_config = config_manager.config['output_audio']
         output_audio_control = OutputAudioControl(

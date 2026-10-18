@@ -25,6 +25,7 @@ from .system_tray import SystemTray
 from .config_manager import ConfigManager
 from .text_postprocessor import TextPostProcessor
 from .prompt_enhancer import PromptEnhancer
+from .voice_address import compose, parse_address
 from .audio_feedback import AudioFeedback
 from .output_audio_control import OutputAudioControl
 from .utils import OptionalComponent
@@ -611,7 +612,16 @@ class StateManager:
 
             if self.prompt_enhancer:
                 # After command matching: a spoken command must stay recognisable.
-                enhanced = self.prompt_enhancer.enhance(transcribed_text)
+                # Only the body: a spoken pane address must reach delivery
+                # intact. compose keeps prefix and send phrase verbatim, so
+                # ordinary speech that looks like one ("To be honest, …")
+                # comes back unchanged apart from the rewrite.
+                addressed = parse_address(transcribed_text) if self.clipboard_manager.voice_addressing else None
+                if addressed is not None and addressed.target is not None:
+                    addressed.body = self.prompt_enhancer.enhance(addressed.body)
+                    enhanced = compose(addressed)
+                else:
+                    enhanced = self.prompt_enhancer.enhance(transcribed_text)
                 if enhanced != transcribed_text:
                     print(f"   ✓ Enhanced: '{enhanced}'")
                 transcribed_text = enhanced
