@@ -612,10 +612,16 @@ class StateManager:
 
             if self.prompt_enhancer:
                 # After command matching: a spoken command must stay recognisable.
-                # Only the body: a spoken pane address must reach delivery intact.
-                addressed = parse_address(transcribed_text)
-                addressed.body = self.prompt_enhancer.enhance(addressed.body)
-                enhanced = compose(addressed)
+                # Only the body: a spoken pane address must reach delivery
+                # intact. compose keeps prefix and send phrase verbatim, so
+                # ordinary speech that looks like one ("To be honest, …")
+                # comes back unchanged apart from the rewrite.
+                addressed = parse_address(transcribed_text) if self.clipboard_manager.voice_addressing else None
+                if addressed is not None and addressed.target is not None:
+                    addressed.body = self.prompt_enhancer.enhance(addressed.body)
+                    enhanced = compose(addressed)
+                else:
+                    enhanced = self.prompt_enhancer.enhance(transcribed_text)
                 if enhanced != transcribed_text:
                     print(f"   ✓ Enhanced: '{enhanced}'")
                 transcribed_text = enhanced
