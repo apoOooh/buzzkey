@@ -54,10 +54,27 @@ jobs:
       - name: Install Python build tools
         run: python -m pip install --quiet build setuptools wheel
 
+      # Unauthenticated release downloads from runners time out under load
+      # (504/503); gh downloads authenticated, the archive hash is still
+      # checked by fetch-pyapp-source.ps1.
       - name: Fetch verified pyapp source
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          ./pyapp-build/fetch-pyapp-source.ps1 -Destination pyapp-source
+          $Source = Get-Content pyapp-build/pyapp-source.json -Raw | ConvertFrom-Json
+          if ($Source.url -notmatch '^https://github\.com/([^/]+/[^/]+)/releases/download/([^/]+)/([^/]+)$') {
+            throw "Unexpected pyapp source URL $($Source.url)"
+          }
+          $Repo, $Tag, $Asset = $Matches[1], $Matches[2], $Matches[3]
+          $Archive = Join-Path $env:RUNNER_TEMP $Asset
+          for ($Attempt = 1; $Attempt -le 5; $Attempt++) {
+            gh release download $Tag -R $Repo -p $Asset -O $Archive --clobber
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($Attempt -eq 5) { throw "pyapp source download failed" }
+            Start-Sleep -Seconds (15 * $Attempt)
+          }
+          ./pyapp-build/fetch-pyapp-source.ps1 -Destination pyapp-source -ArchivePath $Archive
           Copy-Item pyapp-build/Cargo.lock pyapp-source/Cargo.lock -Force
           @{ pyapp_source_path = "pyapp-source"; dist_path = "dist" } | ConvertTo-Json | Set-Content pyapp-build/build-config.json
 
