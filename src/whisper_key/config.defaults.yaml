@@ -221,6 +221,25 @@ post_processing: # Text Post-Processing (applied to transcription output)
     #     amine absorber: [immune absorber]
     corrections: {}
 
+prompt_enhancer: # Rewrite dictations into a concise prompt via a local LLM (optional)
+    # Off by default. Needs an OpenAI-compatible chat endpoint such as llama.cpp's llama-server.
+    # Only http on loopback (127.0.0.1, localhost, ::1) is accepted; anything else disables it.
+    # Voice commands are never rewritten; any error, timeout or overlong reply keeps the original text.
+    # A leading <think>...</think> block from reasoning models is stripped.
+    enabled: false
+    url: http://127.0.0.1:8080/v1/chat/completions
+    # Model name sent to the server ("" = server default)
+    model: ""
+    # Seconds to wait for the rewrite before keeping the original text
+    # Recording is blocked meanwhile, so keep this short. Reasoning models think first and often
+    # exceed it: start llama-server with --reasoning-format deepseek, use a non-reasoning model,
+    # or raise the timeout. A timeout is logged as a warning.
+    timeout: 8
+    # Dictations with fewer words are delivered unchanged
+    min_words: 4
+    # Instruction for the LLM ("" = built-in default)
+    system_prompt: ""
+
 hotkey: # Hotkey Configuration
     # Easiest: tray menu > "Shortcuts..." (Windows) records and saves these for you.
     #
@@ -528,6 +547,11 @@ swarmterm: # Dictation into Swarmterm panes
     # true = when Swarmterm is the foreground app, deliver through its local voice endpoint
     # false = always use the normal paste/type delivery
     enabled: true
+
+    # Address a pane by voice: "Pane 2: ..." or "Pane Backend: ..." ("An Backend: ...") sends the
+    # dictation to that Swarmterm pane; ending with "... senden" / "... send" presses Enter (only if
+    # Swarmterm allows auto-Enter). Needs a Swarmterm with pane addressing; ambiguous names are refused.
+    voice_addressing: true
 
     # Swarmterm app ids whose voice-endpoint.json files are checked (installed app and dev build)
     app_ids:

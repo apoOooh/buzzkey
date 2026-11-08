@@ -1,0 +1,129 @@
+name: upstream sync
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Upstream release tag (empty = latest release)
+        required: false
+      dry_run:
+        description: Merge and test only, push nothing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+    steps:
+      # Pushes go over the deploy key: GITHUB_TOKEN may not push upstream's
+      # workflow changes, and a tag it pushes would not start release-buzzkey.
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          ssh-key: ${{ secrets.UPSTREAM_SYNC_DEPLOY_KEY }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Find upstream release
+        id: check
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          python -m pip install --quiet packaging
+          UPSTREAM_REPO=$(python tools/release/upstream_sync.py upstream-repo)
+          echo "repo=$UPSTREAM_REPO" >> "$GITHUB_OUTPUT"
+          TAG="$INPUT_TAG"
+          if [ -z "$TAG" ]; then
+            TAG=$(gh api "repos/$UPSTREAM_REPO/releases/latest" -q .tag_name)
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          python tools/release/upstream_sync.py check "$TAG" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Skip known states
+        id: gate
+        if: steps.check.outputs.newer == 'true'
+        run: |
+          RELEASE_TAG="${{ steps.check.outputs.release_tag }}"
+          if git rev-parse -q --verify "refs/tags/$RELEASE_TAG" > /dev/null; then
+            echo "::notice::$RELEASE_TAG already exists"
+            exit 0
+          fi
+          OPEN=$(gh issue list --state open --search "\"Upstream ${{ steps.check.outputs.tag }}:\" in:title" --json number -q length)
+          if [ "$OPEN" != "0" ] && [ "$DRY_RUN" != "true" ]; then
+            echo "::notice::Open issue for ${{ steps.check.outputs.tag }} waits for a manual merge"
+            exit 0
+          fi
+          echo "go=true" >> "$GITHUB_OUTPUT"
+
+      - name: Merge upstream release
+        if: steps.gate.outputs.go == 'true'
+        run: |
+          TAG="${{ steps.check.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "https://github.com/${{ steps.check.outputs.repo }}.git"
+          git fetch --no-tags upstream "refs/tags/$TAG:refs/tags/$TAG"
+          git switch -c "chore/upstream-${TAG#v}"
+          git -c merge.conflictStyle=merge merge --no-ff --no-commit "$TAG" || true
+          python tools/release/upstream_sync.py apply "$TAG"
+          git commit --no-edit -m "Merge upstream release $TAG into buzzkey" \
+            -m "Automatic merge: version ${{ steps.check.outputs.version }}, changelog conflicts kept both sides."
+
+      - name: Read upstream Python version
+        id: python
+        if: steps.gate.outputs.go == 'true'
+        run: |
+          VERSION=$(sed -nE 's/^\s*python-version:\s*"([^"]+)".*/\1/p' .github/workflows/release.yml | head -1)
+          echo "version=${VERSION:-3.12}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.go == 'true'
+        with:
+          python-version: ${{ steps.python.outputs.version }}
+
+      - name: Unit tests
+        if: steps.gate.outputs.go == 'true'
+        run: |
+          python -m compileall -q src
+          python -m pip install --quiet -e . pytest packaging
+          python -m pytest -q tests
+
+      - name: Release
+        if: steps.gate.outputs.go == 'true' && env.DRY_RUN != 'true'
+        run: |
+          TAG="${{ steps.check.outputs.tag }}"
+          VERSION="${{ steps.check.outputs.version }}"
+          RELEASE_TAG="${{ steps.check.outputs.release_tag }}"
+          BRANCH="chore/upstream-${TAG#v}"
+          git switch dev
+          git merge --no-ff "$BRANCH" -m "Merge $BRANCH into dev"
+          git switch -c main origin/main
+          git merge --no-ff dev -m "Release buzzkey $VERSION"
+          git tag -a "$RELEASE_TAG" -m "buzzkey $VERSION"
+          git push --atomic origin dev main "refs/tags/$RELEASE_TAG"
+
+      - name: Report failure
+        if: failure() && env.DRY_RUN != 'true' && steps.check.outputs.tag != ''
+        run: |
+          gh issue create \
+            --title "Upstream ${{ steps.check.outputs.tag }}: manual merge needed" \
+            --body "The automatic upstream sync stopped: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Merge the release by hand (CLAUDE.md upstream steps) and close this issue."

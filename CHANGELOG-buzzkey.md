@@ -6,6 +6,23 @@ buzzkey is a fork of [whisper-key-local](https://github.com/SesioN/whisper-key-l
 
 ## [Unreleased]
 
+## [1.10.0+bk.1]
+
+Based on whisper-key-local 1.10.0.
+
+- **Upstream whisper-key 1.10.0** merged automatically from the release tag `v1.10.0`; upstream changes are listed in `CHANGELOG.md`.
+- **Automatic upstream sync:** a daily workflow merges each new whisper-key-local release,
+  runs the tests and publishes the matching signed `buzzkey-<version>-bk.1` release. Conflicts
+  outside the version and changelogs stop the run and open an issue instead.
+- **Talk to a Swarmterm pane** (BUZ-5): "Pane 2: …" or "Pane Backend: …" sends the dictation
+  to that pane, "… senden" presses Enter afterwards (with Swarmterm's Allow auto-Enter). Swarmterm
+  resolves the address and refuses ambiguous names; the text then stays on the clipboard. Needs a
+  Swarmterm with the `address` capability; switch off with `swarmterm.voice_addressing: false`.
+- **Enhance prompt (optional, off by default):** `prompt_enhancer` in the config rewrites a
+  dictation into a concise prompt through a local OpenAI-compatible LLM (llama.cpp's
+  llama-server). Loopback only, no proxy; voice commands are never rewritten, and any error or
+  timeout delivers the original text.
+
 ## [1.9.6+bk.1]
 
 Based on whisper-key-local 1.9.6.

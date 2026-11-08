@@ -13,7 +13,8 @@ PROTOCOL_VERSION = 1
 # Negotiated inside `hello`; the envelope above stays 1 so old Swarmterm
 # builds keep working. Swarmterm 1.9.0 answers hello with bad-request.
 PROTO = 2
-CAPABILITIES = ["indicator"]
+# "address" (BUZ-5): begin may name a pane ("Pane 2: …"); Swarmterm resolves it.
+CAPABILITIES = ["indicator", "address"]
 # A held dictation may stay silent this long; Swarmterm pushes `expired`
 # at 120 s and closes the connection first.
 HOLD_TIMEOUT_SECONDS = 130.0
@@ -36,6 +37,8 @@ class SwarmtermTarget:
     error: Optional[str] = None
     # Set when the pin lives on a held connection ("indicator").
     session: Optional["DictationSession"] = None
+    # Swarmterm accepted the "address" capability on that connection.
+    address: bool = False
 
 
 class SwarmtermError(Exception):
@@ -317,7 +320,8 @@ class SwarmtermClient:
             session.close()
             raise
         if response.get("ok") and isinstance(response.get("pin"), str):
-            return SwarmtermTarget(endpoint=endpoint, pin=response["pin"], name=response.get("name"), session=session)
+            return SwarmtermTarget(endpoint=endpoint, pin=response["pin"], name=response.get("name"), session=session,
+                                   address="address" in (hello.get("capabilities") or []))
         session.close()
         return SwarmtermTarget(endpoint=endpoint, pin=None, error=str(response.get("reason", "rejected")))
 
@@ -341,6 +345,38 @@ class SwarmtermClient:
         if response.get("ok") and isinstance(response.get("pin"), str):
             return SwarmtermTarget(endpoint=endpoint, pin=response["pin"], name=response.get("name"))
         return SwarmtermTarget(endpoint=endpoint, pin=None, error=str(response.get("reason", "rejected")))
+
+    def retarget(self, target: SwarmtermTarget, address: str) -> tuple[bool, Optional[str]]:
+        """Move a pinned dictation to the pane named by voice (BUZ-5).
+
+        The new pin is taken first and the old one dropped only after: if
+        Swarmterm finds no such pane, the dictation still has its original
+        pane ("An der Stelle, …" is ordinary speech, not an address).
+        """
+        session = target.session
+        if target.pin is None or session is None or not target.address:
+            return False, "address-unsupported"
+        if session.cancelled_reason is not None:
+            return False, "cancelled-by-user" if session.cancelled_reason == "user" else session.cancelled_reason
+        try:
+            response = session.request({"op": "begin", "requestId": uuid.uuid4().hex, "target": address},
+                                       self.begin_timeout_seconds)
+        except SwarmtermError as e:
+            self.logger.warning(f"Swarmterm retarget failed: {e}")
+            return False, str(e)
+        if not (response.get("ok") and isinstance(response.get("pin"), str)):
+            return False, str(response.get("reason", "rejected"))
+        old, target.pin, target.name = target.pin, response["pin"], response.get("name")
+        # Same pane again: Swarmterm superseded the old pin with a push that
+        # arrived before this answer; it is not a cancel of the dictation.
+        session.cancelled_reason = None
+        if old != target.pin:
+            try:
+                session.request({"op": "cancel", "requestId": uuid.uuid4().hex, "pin": old}, self.begin_timeout_seconds)
+            except SwarmtermError as e:
+                # The old pin expires on its own; the new one is what counts.
+                self.logger.debug(f"Swarmterm cancel of the old pin failed: {e}")
+        return True, None
 
     def insert(self, target: SwarmtermTarget, text: str, submit: bool) -> tuple[bool, Optional[str]]:
         if target.pin is None:

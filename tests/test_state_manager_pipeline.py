@@ -31,7 +31,8 @@ def make_config_manager(settings=None):
     return config_manager
 
 
-def make_state_manager(transcribe=None, precheck_enabled=True, precheck_result=True, settings=None, model_key='tiny'):
+def make_state_manager(transcribe=None, precheck_enabled=True, precheck_result=True, settings=None, model_key='tiny',
+                       prompt_enhancer=None):
     config_manager = make_config_manager(settings)
     transcribe_function = transcribe or (lambda audio: "hello")
     engine = MagicMock()
@@ -49,7 +50,7 @@ def make_state_manager(transcribe=None, precheck_enabled=True, precheck_result=T
     voice_command_manager.match_in_dictation = False
     manager = StateManager(audio_recorder=None, whisper_engine=engine, clipboard_manager=clipboard_manager,
                            config_manager=config_manager, vad_manager=vad_manager, text_postprocessor=text_postprocessor,
-                           voice_command_manager=voice_command_manager)
+                           voice_command_manager=voice_command_manager, prompt_enhancer=prompt_enhancer)
     manager.audio_recorder = MagicMock()
     manager.audio_recorder.get_recording_status.return_value = True
     manager.audio_recorder.continuous_vad = None
@@ -393,6 +394,25 @@ def test_fixed_language_warning_only_for_an_explicit_choice(capsys):
     assert 'only transcribes' in capsys.readouterr().out
 
 
+def test_prompt_enhancer_rewrites_dictation_before_delivery():
+    enhancer = MagicMock()
+    enhancer.enhance.side_effect = lambda text: text.upper()
+    manager, _, _, clipboard = make_state_manager(prompt_enhancer=enhancer)
+    manager._submit_transcription(Recording(np.ones(16000, dtype=np.float32), completed_analysis(True, 0.0)), False)
+    wait_for_pipeline(manager)
+    clipboard.deliver_transcription.assert_called_once_with("HELLO", False, ANY)
+
+
+def test_prompt_enhancer_never_sees_voice_commands():
+    enhancer = MagicMock()
+    manager, _, _, clipboard = make_state_manager(prompt_enhancer=enhancer)
+    manager._match_dictation_command = MagicMock(return_value="cmd")
+    manager._submit_transcription(Recording(np.ones(16000, dtype=np.float32), completed_analysis(True, 0.0)), False)
+    wait_for_pipeline(manager)
+    enhancer.enhance.assert_not_called()
+    clipboard.deliver_transcription.assert_not_called()
+
+
 def test_focus_target_captured_at_start_reaches_delivery(monkeypatch):
     from whisper_key import state_manager as state_module
     window_style = MagicMock()
@@ -439,3 +459,13 @@ def test_retry_uses_the_window_focused_at_retry_time(monkeypatch):
     assert manager.retry_failed_recording()
     wait_for_pipeline(manager)
     clipboard.deliver_transcription.assert_called_once_with("again", False, "retry-window")
+
+
+def test_prompt_enhancer_keeps_an_address_like_prefix_verbatim():
+    enhancer = MagicMock()
+    enhancer.enhance.side_effect = lambda text: text.upper()
+    manager, _, _, clipboard = make_state_manager(transcribe=lambda audio: "To be honest, das passt so", prompt_enhancer=enhancer)
+    clipboard.voice_addressing = True
+    manager._submit_transcription(Recording(np.ones(16000, dtype=np.float32), completed_analysis(True, 0.0)), False)
+    wait_for_pipeline(manager)
+    clipboard.deliver_transcription.assert_called_once_with("To be honest, DAS PASST SO", False, ANY)

@@ -33,9 +33,16 @@ jobs:
           git merge-base --is-ancestor $env:GITHUB_SHA origin/main
           if ($LASTEXITCODE -ne 0) { throw "Tagged commit is not on main" }
 
+      - name: Read upstream Python version
+        id: python
+        shell: bash
+        run: |
+          VERSION=$(sed -nE 's/^\s*python-version:\s*"([^"]+)".*/\1/p' .github/workflows/release.yml | head -1)
+          echo "version=${VERSION:-3.12}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ steps.python.outputs.version }}
 
       - uses: dtolnay/rust-toolchain@stable
 

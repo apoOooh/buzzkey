@@ -106,3 +106,55 @@ def test_stop_in_swarmterm_discards_without_clipboard(manager):
     manager.begin_swarmterm_target()
     assert manager.deliver_transcription("hello") is False
     assert manager.pasted == [] and manager.copied == [] and blocked == []
+
+
+class AddressingClient(FakeClient):
+    def __init__(self, target, retarget_result):
+        super().__init__(target)
+        self.retarget_result = retarget_result
+        self.addresses = []
+
+    def retarget(self, target, address):
+        self.addresses.append(address)
+        ok, reason = self.retarget_result
+        if ok:
+            target.pin, target.name = "p2", address
+        return ok, reason
+
+
+def test_spoken_address_moves_the_dictation_and_strips_the_prefix(manager):
+    client = AddressingClient(target(), (True, None))
+    manager.swarmterm_client = client
+    manager.begin_swarmterm_target()
+    assert manager.deliver_transcription("Pane 2: run the tests, senden.") is True
+    assert client.addresses == ["2"]
+    assert client.inserted == [("p2", "run the tests", True)]
+
+
+def test_ambiguous_or_explicit_unknown_pane_is_refused_with_clipboard(manager):
+    for reason in ("ambiguous", "no-target"):
+        client = AddressingClient(target(), (False, reason))
+        manager.swarmterm_client = client
+        manager.copied.clear()
+        manager.begin_swarmterm_target()
+        assert manager.deliver_transcription("Pane Backend: run it") is False
+        assert client.inserted == [] and client.cancelled == ["p1"]
+        assert manager.copied == ["Pane Backend: run it"]
+        assert manager.pasted == []
+
+
+def test_an_unknown_pane_after_an_is_ordinary_speech(manager):
+    client = AddressingClient(target(), (False, "no-target"))
+    manager.swarmterm_client = client
+    manager.begin_swarmterm_target()
+    assert manager.deliver_transcription("An der Stelle, fehlt ein Test") is True
+    assert client.inserted == [("p1", "An der Stelle, fehlt ein Test", False)]
+
+
+def test_addressing_can_be_switched_off(manager):
+    client = AddressingClient(target(), (True, None))
+    manager.swarmterm_client = client
+    manager.voice_addressing = False
+    manager.begin_swarmterm_target()
+    assert manager.deliver_transcription("Pane 2: hi") is True
+    assert client.addresses == [] and client.inserted == [("p1", "Pane 2: hi", False)]
