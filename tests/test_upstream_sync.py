@@ -174,3 +174,41 @@ def test_real_changelog_names_an_upstream_repo():
 def test_changelog_union_keeps_a_blank_line_before_the_next_section():
     text = "<<<<<<< HEAD\n- ours\n=======\n## [1.10.0]\n- theirs\n>>>>>>> v1.10.0\n"
     assert upstream_sync.resolve_changelog(text) == "- ours\n\n## [1.10.0]\n- theirs\n"
+
+
+def test_latest_release_tag_sorts_by_version_then_bk_number():
+    tags = ["buzzkey-1.9.6-bk.1", "buzzkey-1.10.0-bk.1", "buzzkey-1.10.0-bk.2", "v1.11.0", "buzzkey-1.9.1-bk.5"]
+    assert upstream_sync.latest_release_tag(tags) == "buzzkey-1.10.0-bk.2"
+    assert upstream_sync.latest_release_tag(["v1.0.0"]) is None
+
+
+@pytest.mark.parametrize(
+    ("released", "run", "action"),
+    [
+        (True, None, "ok"),
+        (False, None, "report"),
+        (False, {"status": "in_progress", "conclusion": "", "attempt": 1}, "wait"),
+        (False, {"status": "queued", "conclusion": "", "attempt": 2}, "wait"),
+        (False, {"status": "completed", "conclusion": "failure", "attempt": 1}, "rerun"),
+        (False, {"status": "completed", "conclusion": "cancelled", "attempt": 2}, "rerun"),
+        (False, {"status": "completed", "conclusion": "failure", "attempt": 3}, "report"),
+        (False, {"status": "completed", "conclusion": "success", "attempt": 1}, "report"),
+    ],
+)
+def test_release_action(released, run, action):
+    assert upstream_sync.release_action(released, run) == action
+
+
+def test_release_watch_cli_prints_action_and_run(capsys):
+    run_json = '[{"databaseId": 42, "status": "completed", "conclusion": "failure", "attempt": 1}]'
+    assert upstream_sync.main(["release-watch", "--released", "false", "--run-json", run_json]) == 0
+    assert capsys.readouterr().out.split() == ["action=rerun", "run_id=42"]
+    assert upstream_sync.main(["release-watch", "--released", "true"]) == 0
+    assert capsys.readouterr().out.split() == ["action=ok"]
+
+
+def test_latest_release_tag_cli_reads_git_tags(merge_repo, capsys):
+    git(merge_repo, "tag", "buzzkey-1.0.0-bk.1")
+    git(merge_repo, "tag", "buzzkey-1.0.0-bk.2")
+    assert upstream_sync.main(["--root", str(merge_repo), "latest-release-tag"]) == 0
+    assert capsys.readouterr().out.strip() == "buzzkey-1.0.0-bk.2"

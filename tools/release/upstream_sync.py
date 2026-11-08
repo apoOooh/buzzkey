@@ -1,4 +1,5 @@
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -9,6 +10,9 @@ from packaging.version import InvalidVersion, Version
 STABLE_TAG = re.compile(r"^v(\d+\.\d+\.\d+)$")
 VERSION_LINE = re.compile(r'^version\s*=\s*"([^"]+)"\s*$', re.MULTILINE)
 UNRELEASED = "## [Unreleased]"
+RELEASE_TAG = re.compile(r"^buzzkey-(\d+\.\d+\.\d+)-bk\.(\d+)$")
+MAX_RELEASE_ATTEMPTS = 3
+FAILED = {"failure", "cancelled", "timed_out", "startup_failure"}
 FORK_LINK = re.compile(r"fork of \[[^\]]+\]\(https://github\.com/([\w.-]+/[\w.-]+?)(?:\.git)?/?\)")
 
 
@@ -143,6 +147,27 @@ def cut_changelog(text, upstream, version):
     return text[:start] + UNRELEASED + "\n\n" + "\n".join(section) + "\n\n" + text[body_end:]
 
 
+def latest_release_tag(tags):
+    candidates = []
+    for tag in tags:
+        match = RELEASE_TAG.match(tag.strip())
+        if match:
+            candidates.append((Version(match.group(1)), int(match.group(2)), tag.strip()))
+    return max(candidates)[2] if candidates else None
+
+
+def release_action(released, run):
+    if released:
+        return "ok"
+    if run is None:
+        return "report"
+    if run.get("status") != "completed":
+        return "wait"
+    if run.get("conclusion") in FAILED and int(run.get("attempt") or 1) < MAX_RELEASE_ATTEMPTS:
+        return "rerun"
+    return "report"
+
+
 HANDLERS = {
     "CHANGELOG.md": resolve_changelog,
     "pyproject.toml": resolve_pyproject,
@@ -184,6 +209,10 @@ def main(argv=None):
     check = commands.add_parser("check")
     check.add_argument("tag")
     commands.add_parser("upstream-repo")
+    commands.add_parser("latest-release-tag")
+    watch = commands.add_parser("release-watch")
+    watch.add_argument("--released", choices=["true", "false"], required=True)
+    watch.add_argument("--run-json", default="[]")
     resolve = commands.add_parser("apply")
     resolve.add_argument("tag")
     parser.add_argument("--root", type=Path, default=Path.cwd())
@@ -192,6 +221,16 @@ def main(argv=None):
     try:
         if args.command == "upstream-repo":
             print(upstream_repo(read(root / "CHANGELOG-buzzkey.md")))
+            return 0
+        if args.command == "latest-release-tag":
+            print(latest_release_tag(git("tag", "-l", "buzzkey-*", cwd=root).split()) or "")
+            return 0
+        if args.command == "release-watch":
+            runs = json.loads(args.run_json or "[]")
+            run = runs[0] if runs else None
+            print(f"action={release_action(args.released == 'true', run)}")
+            if run is not None:
+                print(f"run_id={run.get('databaseId', '')}")
             return 0
         upstream = upstream_version(args.tag)
         if args.command == "check":

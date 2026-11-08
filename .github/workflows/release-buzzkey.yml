@@ -149,3 +149,21 @@ jobs:
           name: buzzkey ${{ needs.build-windows.outputs.version }}
           body_path: release-notes.md
           files: release/*
+
+  report-failure:
+    needs: [build-windows, release]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Open issue
+        run: |
+          TITLE="Release ${{ github.ref_name }}: build failed"
+          OPEN=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number -q length)
+          [ "$OPEN" = "0" ] || exit 0
+          gh issue create --title "$TITLE" \
+            --body "Run attempt ${{ github.run_attempt }} failed: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. The daily upstream sync retries the build up to three times. Close this issue once the release is published."
