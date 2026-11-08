@@ -6,10 +6,13 @@ buzzkey is a fork of [whisper-key-local](https://github.com/SesioN/whisper-key-l
 
 ## [Unreleased]
 
-## [1.10.0+bk.1]
+## [1.10.0+bk.2]
 
-Based on whisper-key-local 1.10.0.
+Based on whisper-key-local 1.10.0. The `buzzkey-1.10.0-bk.1` tag was never released: its
+build could not download PyApp during a GitHub outage.
 
+- **Release build downloads PyApp authenticated** with retries; the archive hash check is
+  unchanged.
 - **Upstream whisper-key 1.10.0** merged automatically from the release tag `v1.10.0`; upstream changes are listed in `CHANGELOG.md`.
 - **Automatic upstream sync:** a daily workflow merges each new whisper-key-local release,
   runs the tests and publishes the matching signed `buzzkey-<version>-bk.1` release. Conflicts
