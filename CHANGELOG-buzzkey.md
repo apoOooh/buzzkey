@@ -6,6 +6,9 @@ buzzkey is a fork of [whisper-key-local](https://github.com/SesioN/whisper-key-l
 
 ## [Unreleased]
 
+- **Failed release builds are retried:** the daily sync re-runs a failed build of the newest
+  tag up to three times and opens an issue if no release appears; a failing build opens one too.
+
 ## [1.10.0+bk.2]
 
 Based on whisper-key-local 1.10.0. The `buzzkey-1.10.0-bk.1` tag was never released: its

@@ -127,3 +127,51 @@ jobs:
           gh issue create \
             --title "Upstream ${{ steps.check.outputs.tag }}: manual merge needed" \
             --body "The automatic upstream sync stopped: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Merge the release by hand (CLAUDE.md upstream steps) and close this issue."
+
+  # A failed release build leaves a tag without a release; the sync above
+  # then skips (tag exists), so this job retries the build and reports it.
+  release-watch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check newest buzzkey tag
+        id: watch
+        run: |
+          python -m pip install --quiet packaging
+          TAG=$(python tools/release/upstream_sync.py latest-release-tag)
+          [ -n "$TAG" ] || { echo "::notice::No buzzkey tag"; exit 0; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          RELEASED=false
+          gh release view "$TAG" > /dev/null 2>&1 && RELEASED=true
+          RUNS=$(gh run list --workflow release-buzzkey.yml --branch "$TAG" -L 1 \
+            --json databaseId,status,conclusion,attempt)
+          python tools/release/upstream_sync.py release-watch --released "$RELEASED" --run-json "$RUNS" \
+            | tee -a "$GITHUB_OUTPUT"
+
+      - name: Retry release build
+        if: steps.watch.outputs.action == 'rerun' && env.DRY_RUN != 'true'
+        run: gh run rerun "${{ steps.watch.outputs.run_id }}" --failed
+
+      - name: Report missing release
+        if: steps.watch.outputs.action == 'report' && env.DRY_RUN != 'true'
+        run: |
+          TITLE="Release ${{ steps.watch.outputs.tag }}: no release published"
+          OPEN=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number -q length)
+          [ "$OPEN" = "0" ] || exit 0
+          gh issue create --title "$TITLE" \
+            --body "The tag exists, but release-buzzkey has not published a release (no build run, or still failing after three attempts): $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/release-buzzkey.yml. Fix the build, re-run it and close this issue."
